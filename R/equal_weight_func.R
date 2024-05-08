@@ -1,6 +1,6 @@
 #' Title
 #'
-#' @param train_data xy
+#' @param train_data xyx
 #' @param test_data xy
 #' @param features xy
 #'

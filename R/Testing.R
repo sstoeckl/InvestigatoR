@@ -12,3 +12,4 @@ t_oos <- data_ml$date[data_ml$date > as.Date("2007-01-01")] %>%           # Out-
   as.Date(origin = "1970-01-01")
 
 backtesting(data = data_ml, t_oos = t_oos, m_offset = 1, train_size = 5, weight_func = equal_weights_func())
+#k

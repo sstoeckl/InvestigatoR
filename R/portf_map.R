@@ -1,7 +1,7 @@
 #' Title
 #'
 #' @param t xy
-#' @param data xy
+#' @param data xyx
 #' @param ticks xy
 #' @param t_oos xy
 #' @param m_offset xy
