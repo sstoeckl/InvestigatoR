@@ -1,6 +1,6 @@
 #' Title
 #'
-#' @param data xy
+#' @param data xyy
 #' @param ticks xy
 #' @param t_oos xy
 #' @param m_offset xy
