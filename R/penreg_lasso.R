@@ -1,13 +1,13 @@
 #change the name to penreg without lasso
 #' Title
 #'
-#' @param y_penalized
-#' @param x_penalized
+#' @param y_penalized xy
+#' @param x_penalized xy
 #'
-#' @return
+#' @return xy
 #' @export
 #'
-#' @examples
+#' @examples xy
 
 penreg <- function(y_penalized, x_penalized) {
 
