@@ -1,12 +1,12 @@
 
 #' Title
 #'
-#' @param y
-#' @param features
-#' @param data
-#' @param ntree
+#' @param y xy
+#' @param features xy
+#' @param data xy
+#' @param ntree xy
 #'
-#' @return
+#' @return xy
 #'
 #' @importFrom randomForest randomForest
 #'
@@ -14,9 +14,9 @@
 #' @export
 #'
 #'
-#' @examples
+#' @examples xy
 #'
-random_foreest_predictor <- function(y, features, data, ntree, ) {
+random_foreest_predictor <- function(y, features, data, ntree ) {
   formula <- paste(y , paste(features, collapse = " + ")) # Defines the model
   formula <- as.formula(formula)                                   # Forcing formula object
   fit_RF <- randomForest(formula_C,         # New formula!

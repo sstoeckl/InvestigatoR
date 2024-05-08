@@ -1,15 +1,15 @@
 #' Title
 #'
-#' @param train_features
-#' @param train_labels
-#' @param test_features
-#' @param test_labels
-#' @param epochs
+#' @param train_features xy
+#' @param train_labels xy
+#' @param test_features xy
+#' @param test_labels xy
+#' @param epochs xy
 #'
-#' @return
+#' @return xy
 #' @export
 #'
-#' @examples
+#' @examples xy
 predict_stock <- function(train_features, train_labels, test_features, test_labels, epochs = 50, batches = 32) {
   # Normalize the data
   mean <- apply(train_features, 2, mean)
