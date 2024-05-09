@@ -18,7 +18,7 @@ portf_map <- function(t, data, ticks, t_oos, m_offset, train_size, weight_func){
   test_data <- data %>% filter(date == t_oos[t])                   # Test set
   realized_returns <- test_data %>%
     dplyr::select(R1M_Usd)                                          # 1M holding period
-  temp_weights <- weight_func(train_data, test_data, features)      # Weights calculation
+  temp_weights <- weight_func(train_data = train_data, test_data = test_data)      # Weights calculation
   ind <- match(temp_weights$names, ticks) %>% na.omit()             # Index of test assets
   x <- list(weights = rep(0, length(ticks)))                        # Initialize weights
   x$weights[ind] <- temp_weights$weights                            # Set weights
