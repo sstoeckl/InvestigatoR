@@ -7,7 +7,7 @@
 data_seperation(data, labels, features, start_date, end_date, seperation_date)
 }
 \arguments{
-\item{data}{xy}
+\item{data}{xyy}
 
 \item{labels}{xy}
 

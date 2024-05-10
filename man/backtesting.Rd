@@ -4,20 +4,20 @@
 \alias{backtesting}
 \title{Title}
 \usage{
-backtesting(data, ticks, t_oos, m_offset, train_size, weight_func)
+backtesting(data, sep_date, m_offset, train_size, weight_func)
 }
 \arguments{
 \item{data}{xy}
-
-\item{ticks}{xy}
-
-\item{t_oos}{xy}
 
 \item{m_offset}{xy}
 
 \item{train_size}{xy}
 
 \item{weight_func}{xy}
+
+\item{ticks}{xy}
+
+\item{t_oos}{xy}
 }
 \value{
 xy
