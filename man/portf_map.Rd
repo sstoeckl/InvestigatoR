@@ -9,7 +9,7 @@ portf_map(t, data, ticks, t_oos, m_offset, train_size, weight_func)
 \arguments{
 \item{t}{xy}
 
-\item{data}{xy}
+\item{data}{xyx}
 
 \item{ticks}{xy}
 
