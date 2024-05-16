@@ -1,0 +1,267 @@
+---
+title: "Fetching and Preparing Financial Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Fetching and Preparing Financial Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(tidyverse)
+library(lubridate)
+library(RSQLite)
+library(dbplyr)
+library(scales)
+library(lmtest)
+library(sandwich)
+library(googledrive)
+library(broom)
+library(ggplot2)
+library(tidyr)
+library(kableExtra)
+library(data.table)
+library(fst)
+library(getPass)
+library(RPostgres)
+```
+
+#Introduction
+
+This vignette demonstrates how to fetch and prepare financial data using CRSP and open-source asset pricing data. We will cover connecting to a SQLite database, fetching data from WRDS, downloading data from Google Drive, and merging the datasets.
+
+#Setup
+
+First, we load the necessary libraries and set the path to the SQLite database.
+
+```{r setup, include = FALSE}
+db_path <- "/home/shared/data/tidy_finance.sqlite"
+```
+
+Next, we establish a connection to the SQLite database.
+```{r setup, include = FALSE}
+tidy_finance <- dbConnect(
+  SQLite(),
+  db_path,
+  extended_types = TRUE
+)
+```
+
+#Fetching Data from the Database
+
+We fetch signals and CRSP monthly data from the database and merge them.
+```{r setup, include = FALSE}
+signals <- tbl(tidy_finance, "signals") |>
+  select(permno, yyyymm, mom6m_junk) |> 
+  collect()
+
+crsp_monthly <- tbl(tidy_finance, "crsp_monthly") |>
+  collect()
+
+crsp_monthly <- crsp_monthly |>
+  select(
+    permno, gvkey, month, ret_excess, ret,
+    mktcap, mktcap_lag, exchange
+  ) |>
+  drop_na()
+
+crsp_monthly_signal <- crsp_monthly |>
+  mutate(yyyymm = year(month) * 100 + month(month)) |> 
+  left_join(signals, by = c("permno", "yyyymm"))
+```
+
+
+#Connecting to WRDS and Fetching Data
+
+We connect to WRDS using the RPostgres package and fetch CRSP monthly data.
+```{r setup, include = FALSE}
+wrds <- dbConnect(Postgres(),
+                  host = 'wrds-pgdata.wharton.upenn.edu',
+                  port = 9737,
+                  dbname = 'wrds',
+                  user = getPass('wrds username: '),
+                  password = getPass('wrds password: '),
+                  sslmode = 'require')
+
+crspm_query <- "
+  select a.permno, a.date, a.ret, a.shrout, a.prc, 
+         b.exchcd,
+         c.dlstcd, c.dlret
+  from crsp.msf as a
+  left join crsp.msenames as b
+    on a.permno = b.permno
+    and b.namedt <= a.date
+    and a.date <= b.nameendt
+  left join crsp.msedelist as c
+    on a.permno = c.permno
+    and date_trunc('month', a.date) = date_trunc('month', c.dlstdt)
+"
+crspm <- dbSendQuery(conn = wrds, statement = crspm_query) %>%
+  dbFetch(n = -1) %>%
+  setDT()
+```
+
+#Processing CRSP Data
+
+We process the CRSP data to incorporate delisting returns and create signed predictors.
+```{r setup, include = FALSE}
+crspm <- crspm %>%
+  mutate(
+    dlret = case_when(
+      is.na(dlret) & (dlstcd == 500 | (dlstcd >= 520 & dlstcd <= 584)) & (exchcd == 1 | exchcd == 2) ~ -0.35,
+      is.na(dlret) & (dlstcd == 500 | (dlstcd >= 520 & dlstcd <= 584)) & (exchcd == 3) ~ -0.55,
+      dlret < -1 & !is.na(dlret) ~ -1,
+      TRUE ~ dlret
+    ),
+    dlret = ifelse(is.na(dlret), 0, dlret),
+    ret = (1 + ret) * (1 + dlret) - 1,
+    ret = ifelse(is.na(ret) & (dlret != 0), dlret, ret),
+    ret = 100 * ret,
+    date = as.Date(date),
+    me = abs(prc) * shrout,
+    yyyymm = year(date) * 100 + month(date)
+  )
+
+crspmsignal <- crspm %>%
+  transmute(
+    permno,
+    yyyymm,
+    STreversal = -1 * if_else(is.na(ret), 0, ret),
+    Price = -1 * log(abs(prc)),
+    Size = -1 * log(me)
+  )
+```
+
+#Downloading Data from Google Drive
+
+We download the necessary data from Google Drive and read it.
+```{r setup, include = FALSE}
+pathRelease <- 'https://drive.google.com/drive/u/0/folders/1EP6oEabyZRamveGNyzYU0u6qJ-N43Qfq'
+outpath <- 'temp/'
+drive_auth()
+
+target_dribble <- pathRelease %>% drive_ls() %>%
+  filter(name == 'Firm Level Characteristics') %>% drive_ls() %>%
+  filter(name == 'Full Sets') %>% drive_ls() %>%
+  filter(name == 'signed_predictors_dl_wide.zip')
+dl <- drive_download(target_dribble, path = paste0(outpath, 'deleteme.zip'), overwrite = TRUE)
+
+unzip(paste0(outpath, 'deleteme.zip'), exdir = gsub('/$', '', outpath))
+wide_dl_raw <- fread(paste0(outpath, 'signed_predictors_dl_wide.csv'))
+file.remove(paste0(outpath, 'signed_predictors_dl_wide.csv'))
+```
+
+#Merging Data and Exporting
+
+We merge the downloaded data with CRSP signal data and export the merged dataset.
+```{r setup, include = FALSE}
+signalwide <- full_join(
+  wide_dl_raw,
+  crspmsignal,
+  by = c('permno', 'yyyymm')
+)
+
+fwrite(
+  signalwide,
+  file = paste0(outpath, 'signed_predictors_all_wide.csv'),
+  row.names = FALSE
+)
+```
+
+#Summary
+
+We summarize the data to provide an overview of the available signals.
+
+```{r setup, include = FALSE}
+obs <- signalwide %>%
+  select(-permno) %>%
+  group_by(yyyymm) %>%
+  summarize_all(list(~ sum(!is.na(.))))
+
+widesum <- obs %>% pivot_longer(
+  -yyyymm,
+  names_to = 'signalname',
+  values_to = 'obs'
+) %>%
+  filter(obs >= 1) %>%
+  group_by(signalname) %>%
+  summarize(
+    date_begin = min(yyyymm),
+    date_end = max(yyyymm),
+    mean_firmobs_per_month = floor(mean(obs))
+  ) %>% as.data.frame()
+
+print(paste0(
+  'In ', outpath, 'signal_predictors_all_wide.csv you have the following signals'
+))
+
+widesum %>% setDT()
+widesum %>% print(topn = 10)
+```
+
+#Data Separation Function
+
+We provide a function to separate the data for machine learning tasks.
+```{r setup, include = FALSE}
+data_seperation <- function(data, labels, features, start_date, end_date, seperation_date) {
+  if (inherits(data, "ts") || inherits(data, "mts")) {
+    data <- data.frame(date = as.Date(time(data), origin = "1970-01-01"), data, check.names = FALSE)
+  }
+
+  if (!("stock_id" %in% names(data))) {
+    stop("The 'data' dataframe does not contain the 'stock_id' column.")
+  }
+
+  data <- data %>%
+    dplyr::filter(date > as.Date(start_date), date < as.Date(end_date)) %>%
+    dplyr::arrange(stock_id, date)
+
+  stock_ids <- unique(data$stock_id)
+  stock_days <- data %>%
+    dplyr::group_by(stock_id) %>%
+    dplyr::summarize(nb = dplyr::n(), .groups = 'drop')
+  full_data_stocks <- stock_ids[stock_days$nb == max(stock_days$nb)]
+
+  data <- data %>%
+    dplyr::filter(stock_id %in% full_data_stocks)
+
+  features <- names(data)[4:ncol(data)]  # Adjust index according to your dataset
+
+  separation_date <- as.Date(seperation_date)
+  training_sample <- data %>% dplyr::filter(date < separation_date)
+  testing_sample <- data %>% dplyr::filter(date >= separation_date)
+
+  train_features <- training_sample %>% dplyr::select(dplyr::all_of(features))
+  train_labels <- training_sample[[labels]]
+  test_features <- testing_sample %>% dplyr::select(dplyr::all_of(features))
+  test_labels <- testing_sample[[labels]]
+
+  return(list(
+    train_features = train_features,
+    train_labels = train_labels,
+    test_features = test_features,
+    test_labels = test_labels
+  ))
+}
+```
+
+
+#Conclusion
+This vignette demonstrated how to fetch and prepare financial data using CRSP and open-source asset pricing data. The process included connecting to databases, downloading data, merging datasets, and providing a function for data separation to facilitate machine learning tasks.
+
+
+
+???
+```{r setup, include = FALSE}
+devtools::build_vignettes()
+devtools::check()
+```
+
+
+```{r setup, include = FALSE}
+devtools::install(build_vignettes = TRUE)
+```

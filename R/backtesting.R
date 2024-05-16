@@ -23,3 +23,4 @@ backtesting <- function(data, features,sep_date, m_offset, train_size, weight_fu
                  weight_func = weight_func)
   return(results)
 }
+
