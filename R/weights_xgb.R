@@ -5,6 +5,7 @@
 #' @param features xy
 #'
 #' @return xy
+#' @import xgboost
 #' @export
 #'
 #' @examples xy
@@ -27,11 +28,15 @@ weights_xgb <- function(train_data, test_data, features){
   xgb_test <- test_data %>%                     # Test sample => XGB format
     dplyr::select(features) %>%
     as.matrix() %>%
-    xgb.DMatrix()
+    xgboost::xgb.DMatrix()
 
-  pred <- predict(fit, xgb_test)                # Single prediction
-  w <- pred > median(pred)                      # Keep only the 50% best predictions
-  w$weights <- w / sum(w)
+  #pred <- predict(fit, xgb_test)                # Single prediction
+  #w <- pred > median(pred)                      # Keep only the 50% best predictions
+  #w$weights <- w / sum(w)
+  w <- data.frame(weights = pred > median(pred))  # Initialize w as a dataframe
+  w$weights <- ifelse(w$weights, 1, 0)  # Convert logical to binary (1 for TRUE, 0 for FALSE)
+  w$weights <- w$weights / sum(w$weights)  # Normalize weights
+
   w$names <- unique(test_data$stock_id)
   return(w)                                     # Best predictions, equally-weighted
 }

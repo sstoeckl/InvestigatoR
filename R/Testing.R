@@ -1,7 +1,7 @@
 library(dplyr)
 library(ggplot2)
 
-back_test <- backtesting(data = data_ml, sep_date = "2014-01-01", m_offset = 1, train_size = 5, weight_func = weights_xgb)
+back_test <- backtesting(data = data_ml, features = features_short,sep_date = "2014-01-01", m_offset = 1, train_size = 5, weight_func = weights_xgb)
 
 # Assuming back_test is your list
 returns <- sapply(back_test, function(x) x$returns)
