@@ -10,7 +10,9 @@ License: MIT + file LICENSE
 Depends: R (>= 4.0.0)
 Imports: 
     dplyr,
-    stats
+    stats,
+    tidyquant,
+    PerformanceAnalytics
 Encoding: UTF-8
 LazyData: true
 Authors@R: c(
