@@ -6,6 +6,9 @@
 #' @param append boolean, whether to append the portfolio to the portfolio object
 #'
 #' @return a portfolio object suitable for furtehr processing with summary or plot
+#'
+#' @importFrom dplyr select all_of arrange group_by mutate ungroup
+#'
 #' @export
 #'
 #' @examples
@@ -26,9 +29,9 @@ backtesting_portfolios <- function(return_prediction_object, portfolio_object = 
   # Loop through each model specified in pf_config
   model_ids <- pf_config$predictions
   specific_predictions <- return_prediction_object$predictions %>%
-    select(stock_id, date, all_of(model_ids))
+    dplyr::select(stock_id, date, dplyr::all_of(model_ids))
   specific_errors <- return_prediction_object$errors %>%
-    select(stock_id, date, all_of(model_ids))
+    dplyr::select(stock_id, date, dplyr::all_of(model_ids))
 
   # Loop through different weight configurations
   for (i in 2:length(pf_config)) {
@@ -49,7 +52,7 @@ backtesting_portfolios <- function(return_prediction_object, portfolio_object = 
       colnames(new_weights)[-c(1:2)] <- model_ids
 
       for (col in 3:ncol(new_weights)) {
-        new_weights_ind <- new_weights |>  select(stock_id, date, all_of(col))
+        new_weights_ind <- new_weights |>  dplyr::select(stock_id, date, all_of(col))
         # Store or update the weights in the portfolio object
         portfolio_object <- add_weight_model(portfolio_object, weight_model, weight_config, new_weights_ind)
       }

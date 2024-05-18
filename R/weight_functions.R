@@ -11,6 +11,10 @@
 #'  in case of allow_short_sale=FALSE this is the max weight sum in long leg
 #'
 #' @return tibble with stock_id, date, and weight
+#'
+#' @importFrom dplyr arrange group_by select mutate
+#' @importFrom purrr map reduce
+#'
 #' @export
 #'
 #' @examples
@@ -39,45 +43,47 @@ quantile_weights <- function(return_predictions, errors, constraints=NULL) {
   }
   weights <- lapply(colnames(return_predictions[-(1:2)]), function(pred_col) {
     pred_data <- return_predictions %>%
-      select(stock_id, date, pred=pred_col)
+      dplyr::select(stock_id, date, pred=pred_col)
   if (constraints$allow_short_sale) {
     # generate quantile portfolios
     weights <- pred_data %>%
-      arrange(stock_id, date) %>%
-      group_by(date) %>%
-      mutate(
+      dplyr::arrange(stock_id, date) %>%
+      dplyr::group_by(date) %>%
+      dplyr::mutate(
         quantile_long = quantile(pred, probs = 1 - constraints$quantiles$long),
         quantile_short = quantile(pred, probs = constraints$quantiles$short),
         weight = ifelse(pred>=quantile_long,1,ifelse(pred<=quantile_short,-1,0))) |>
-      mutate( # apply max/min weights
+      dplyr::mutate( # apply max/min weights
         weight = pmax(weight, constraints$min_weight),
         weight = pmin(weight, constraints$max_weight)
       ) |>
-      ungroup() |>
-      mutate( # apply sum constraint
+      dplyr::ungroup() |>
+      dplyr::mutate( # apply sum constraint
         short=ifelse(weight<0,1,0)) |>
-      group_by(date,short) |>
-      mutate(weight = weight/sum(weight)*constraints$b) |>
-      ungroup() |>  select(stock_id,date,weight)
+      dplyr::group_by(date,short) |>
+      dplyr::mutate(weight = weight/sum(weight)*constraints$b) |>
+      dplyr::ungroup() |>
+      dplyr::select(stock_id,date,weight)
   } else {
     # generate quantile portfolios
     weights <- pred_data %>%
-      arrange(stock_id, date) %>%
-      group_by(date) %>%
-      mutate(
+      dplyr::arrange(stock_id, date) %>%
+      dplyr::group_by(date) %>%
+      dplyr::mutate(
         quantile_long = quantile(pred, probs = 1 - constraints$quantiles$long),
         weight = ifelse(pred>=quantile_long,1,0)) |>
-      mutate( # apply max/min weights
+      dplyr::mutate( # apply max/min weights
         weight = pmax(weight, constraints$min_weight)
       ) |>
-      ungroup() |>
-      mutate( # apply sum constraint
+      dplyr::ungroup() |>
+      dplyr::mutate( # apply sum constraint
         weight = weight/sum(weight)*constraints$b) |>
-      ungroup() |>  select(stock_id,date,weight)
+      dplyr::ungroup() |>
+      dplyr::select(stock_id,date,weight)
   }
   })
   weights <- weights |> purrr::reduce(left_join, by = c("stock_id", "date")) |>
-    select(stock_id, date, everything())
+    dplyr::select(stock_id, date, everything())
   return(weights)
 }
 

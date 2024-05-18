@@ -37,6 +37,11 @@ convert_period_to_days <- function(period) {
 #' @param rolling A boolean that indicates whether the window should be rolling or expanding (FALSE)
 #'
 #' @return A tibble with columns training_start, training_end, prediction_start, prediction_end, and prediction_phase
+#'
+#' @importFrom lubridate days
+#' @importFrom dplyr filter mutate lag
+#' @importFrom tidyr unnest
+#'
 #' @export
 #'
 #' @examples
@@ -66,23 +71,23 @@ select_dates_by_offset <- function(dates, window_size, step_size, offset, rollin
   current_date <- start_date
 
   # Populate target dates taking into account the step_days and not exceeding the end_date
-  while ((current_date + days(step_days)) <= end_date + days(offset_days) + days(step_days)) {
-    current_date <- current_date + days(step_days)
+  while ((current_date + lubridate::days(step_days)) <= end_date + lubridate::days(offset_days) + lubridate::days(step_days)) {
+    current_date <- current_date + lubridate::days(step_days)
     target_dates <- c(target_dates, current_date)
   }
 
   # Generate a tibble with training and prediction windows
   date_intervals <- tibble(
     training_start = target_dates,
-    training_end = target_dates + days(window_days) - days(1),
-    prediction_start = target_dates + days(window_days) + days(offset_days),
-    prediction_end = target_dates + days(window_days) + days(offset_days) + days(step_days) - days(1),
+    training_end = target_dates + lubridate::days(window_days) - lubridate::days(1),
+    prediction_start = target_dates + lubridate::days(window_days) + lubridate::days(offset_days),
+    prediction_end = target_dates + lubridate::days(window_days) + lubridate::days(offset_days) + lubridate::days(step_days) - lubridate::days(1),
     prediction_phase = "OOS"
   )
 
   # Map calculated dates back to the nearest real dates available in the dataset
   date_intervals <- date_intervals %>%
-    mutate(training_start = map(training_start, ~ dates[which.min(abs(dates - .x))]),
+    dplyr::mutate(training_start = map(training_start, ~ dates[which.min(abs(dates - .x))]),
            training_end = map(training_end, ~ dates[which.min(abs(dates - .x))]),
            prediction_start = map(prediction_start, ~ dates[which.min(abs(dates - .x))]),
            prediction_end = map(prediction_end, ~ dates[which.min(abs(dates - .x))]))
@@ -94,35 +99,48 @@ select_dates_by_offset <- function(dates, window_size, step_size, offset, rollin
 
   # consistency check
   #remove rows with zero preditions
-  date_intervals <- date_intervals |> filter(prediction_start!=prediction_end)
+  date_intervals <- date_intervals |> dplyr::filter(prediction_start!=prediction_end)
   # adjust last row to have prediction end date beyond dataset
-  date_intervals$prediction_end[nrow(date_intervals)] <- max(dates)+days(step_days)
+  date_intervals$prediction_end[nrow(date_intervals)] <- max(dates)+lubridate::days(step_days)
   # check that always prediction_start = prediction end
   date_intervals <- date_intervals |>
-    mutate(prediction_start=as.Date(ifelse(!is.na(lag(prediction_end))&prediction_start>=lag(prediction_end),lag(prediction_end),prediction_start)))
+    dplyr::mutate(prediction_start=as.Date(ifelse(!is.na(dplyr::lag(prediction_end))&prediction_start>=dplyr::lag(prediction_end),dplyr::lag(prediction_end),prediction_start)))
 
   return(date_intervals)
 }
 
+#' Helepr function to create performance metrics for a given set of returns, weights, and actual data
+#'
+#' @param returns_data return data
+#' @param weights_data weights data
+#' @param actual_data actual realized returns
+#'
+#' @importFrom dplyr group_by summarise pivot_longer left_join mutate
+#' @importFrom tidyr pivot_longer
+#'
+#' @return
+#' @export
+#'
+#' @examples
 perf_met <- function(returns_data, weights_data, actual_data){
 
   stats <- returns_data |>
-    pivot_longer(cols = -date, names_to = "portfolio", values_to = "return") |>
-    group_by(portfolio) |>
-    summarise(mean=mean(return),sd=sd(return),SR=mean/sd,VaR_5=quantile(return,0.05), ,.groups="drop")
+    tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "return") |>
+    dplyr::group_by(portfolio) |>
+    dplyr::summarise(mean=mean(return),sd=sd(return),SR=mean/sd,VaR_5=quantile(return,0.05), ,.groups="drop")
 
   turnover <- weights_data |>
-    pivot_longer(cols = 3:last_col(), names_to = "portfolio", values_to = "weight") |>
-    left_join(actual_data, by = c("stock_id","date")) |>
-    group_by(stock_id,portfolio) |>
-    mutate(prior_weight=dplyr::lag(weight,default = 0)*(1+actual_return)) |>
-    group_by(portfolio,date) |>
-    mutate(turnover=abs(weight-prior_weight)/sum(prior_weight)) |>
-    group_by(portfolio) |>
-    summarise(turnover=sum(turnover),.groups="drop")
+    tidyr::pivot_longer(cols = 3:last_col(), names_to = "portfolio", values_to = "weight") |>
+    dplyr::left_join(actual_data, by = c("stock_id","date")) |>
+    dplyr::group_by(stock_id,portfolio) |>
+    dplyr::mutate(prior_weight=dplyr::lag(weight,default = 0)*(1+actual_return)) |>
+    dplyr::group_by(portfolio,date) |>
+    dplyr::mutate(turnover=abs(weight-prior_weight)/sum(prior_weight)) |>
+    dplyr::group_by(portfolio) |>
+    dplyr::summarise(turnover=sum(turnover),.groups="drop")
 
   stats <- stats |>
-    left_join(turnover, by = "portfolio")
+    dplyr::left_join(turnover, by = "portfolio")
 
   return(stats)
 }

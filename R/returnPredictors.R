@@ -6,6 +6,12 @@
 #' @param fast logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R
 #'
 #' @return tibble with stock_id, date and pred_return matching the test_data
+#'
+#' @importFrom RcppArmadillo fastLm
+#' @importFrom dplyr pull
+#' @importFrom tibble tibble
+#' @importFrom stats predict
+#'
 #' @export
 #'
 #' @examples
@@ -20,7 +26,7 @@ ols_pred <- function(train_data, test_data, config=list(), fast=TRUE) {
   if (fast) {
     # fast cpp implementation
     mm <- cbind(1, as.matrix(train_data[,4:ncol(train_data)]))   # model matrix
-    y  <- train_data |> pull(3)            # response
+    y  <- train_data |> dplyr::pull(3)            # response
     plm <- RcppArmadillo::fastLm(mm, y)
     predictions <- predict(plm, cbind(1, as.matrix(test_data[,3:ncol(test_data)])))
   } else {
@@ -31,7 +37,7 @@ ols_pred <- function(train_data, test_data, config=list(), fast=TRUE) {
     predictions <- as.vector(predict(flm, test_data[,3:ncol(test_data)]))
   }
   # match preds back to stock_id and date
-  predictions <- tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
+  predictions <- tibble::tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
   return(predictions)
 }
 
@@ -43,6 +49,11 @@ ols_pred <- function(train_data, test_data, config=list(), fast=TRUE) {
 #' @param fast logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R
 #'
 #' @return tibble with stock_id, date and pred_return matching the test_data
+#'
+#' @import xgboost
+#' @importFrom tibble tibble
+#' @importFrom stats predict
+#'
 #' @export
 #'
 #' @examples
@@ -89,7 +100,7 @@ xgb_pred <- function(train_data, test_data, config) {
   predictions <- as.vector(predict(fit, xgb_test))
 
   # match preds back to stock_id and date
-  predictions <- tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
+  predictions <- tibble::tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
   return(predictions)
 }
 
