@@ -19,7 +19,7 @@ Create returnPrediction S3 object
 }
 \examples{
 # Initialize the returnPrediction object
-data <- tibble(
+data <- tibble::tibble(
   stock_id = 1:100,
   date = seq.Date(Sys.Date(), by = "day", length.out = 100),
   return_label = runif(100)

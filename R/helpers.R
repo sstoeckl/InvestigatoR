@@ -4,6 +4,7 @@
 #'
 #' @return The number of days in the time period
 #'
+#' @export
 #' @examples
 #' convert_period_to_days("3 days")
 #' convert_period_to_days("1 week")

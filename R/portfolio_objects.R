@@ -6,12 +6,13 @@
 #' @return returnPrediction S3 object
 #'
 #' @importFrom dplyr select
+#' @importFrom tibble tibble
 #'
 #' @export
 #'
 #' @examples
 #' # Initialize the returnPrediction object
-#' data <- tibble(
+#' data <- tibble::tibble(
 #'   stock_id = 1:100,
 #'   date = seq.Date(Sys.Date(), by = "day", length.out = 100),
 #'   return_label = runif(100)
@@ -56,6 +57,7 @@ create_return_prediction <- function(data, label) {
 #' @return returnPrediction S3 object with added model prediction
 #'
 #' @importFrom dplyr mutate
+#' @importFrom tibble tibble
 #'
 #' @export
 #'
@@ -63,7 +65,7 @@ create_return_prediction <- function(data, label) {
 #' \dontrun{
 #' # Assuming 'return_prediction' has been initialized and contains actual returns
 #' # Sample new prediction data
-#' new_predictions <- tibble(
+#' new_predictions <- tibble::tibble(
 #'   stock_id = 1:100,
 #'   date = seq.Date(Sys.Date(), by = "day", length.out = 100),
 #'   prediction = runif(100)  # Example prediction values
@@ -190,11 +192,12 @@ summary.returnPrediction <- function(return_prediction_object, benchmark = NULL)
 #' @return A portfolioReturns S3 object
 #'
 #' @importFrom dplyr select distinct
+#' @importFrom tibble tibble
 #'
 #' @export
 #'
 #' @examples
-#' data <- tibble(
+#' data <- tibble::tibble(
 #'   stock_id = 1:100,
 #'   date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)),
 #'   return_label = runif(100)

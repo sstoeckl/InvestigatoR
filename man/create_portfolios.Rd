@@ -18,7 +18,7 @@ A portfolioReturns S3 object
 Create portfolioReturns S3 object
 }
 \examples{
-data <- tibble(
+data <- tibble::tibble(
   stock_id = 1:100,
   date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)),
   return_label = runif(100)
