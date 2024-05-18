@@ -143,7 +143,7 @@ backtesting_returns <- function(data_ml, return_prediction_object=NULL, return_l
 
   # end parallel processing carefully
   future::plan("sequential")
-  closeAllConnections()
+  #closeAllConnections()
 
   # return data
   return(return_prediction_object)
