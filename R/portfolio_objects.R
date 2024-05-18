@@ -163,17 +163,17 @@ calculate_errors <- function(predictions, actual_returns) {
 #' @return Data frame with error statistics for each model
 #' @export
 #'
-summary.returnPrediction <- function(object, benchmark = NULL) {
+summary.returnPrediction <- function(return_prediction_object, benchmark = NULL) {
   # Calculate errors and regression statistics for each model
-  results <- lapply(names(return_prediction$predictions)[-c(1,2)], function(model_id) {
-    pred_col <- return_prediction$predictions[[model_id]]
-    actual_col <- return_prediction$actual_returns$actual_return
+  results <- lapply(names(return_prediction_object$predictions)[-c(1,2)], function(model_id) {
+    pred_col <- return_prediction_object$predictions[[model_id]]
+    actual_col <- return_prediction_object$actual_returns$actual_return
     errors <- calculate_errors(pred_col, actual_col)
     })
 
   # Convert list of results to a data frame
   results_df <- do.call(rbind, results)
-  rownames(results_df) <- names(return_prediction$predictions)[-c(1,2)]
+  rownames(results_df) <- names(return_prediction_object$predictions)[-c(1,2)]
   results_df
 }
 #
@@ -237,7 +237,7 @@ create_portfolios <- function(data, label) {
 #'
 #' @return A portfolioReturns S3 object with the new weight model added
 #'
-#' @importFrom dplyr select distinct bind_rows left_join
+#' @importFrom dplyr select distinct bind_rows left_join arrange
 #'
 #' @export
 #'
@@ -260,7 +260,7 @@ add_weight_model <- function(portfolio_object, weight_model, weight_config, new_
   # Generate a unique identifier for the new weight model
   model_name <- weight_model
   existing_ids <- names(portfolio_object$weights)
-  counter <- sum(grepl(paste0("^", model_name, "_\\d+$"), existing_ids)) + 1
+  counter <- find_largest_number(strings = existing_ids, paste0(names(new_weights)[3],"_",model_name)) +1
   model_id <- paste0(names(new_weights)[3], "_", model_name, "_", counter)
 
   # Add model details
@@ -281,7 +281,8 @@ add_weight_model <- function(portfolio_object, weight_model, weight_config, new_
     dplyr::select(stock_id, date, weights=!!model_id) |>
     dplyr::left_join(portfolio_object$actual_returns, by = c("stock_id", "date")) |>
     dplyr::group_by(date) |>
-    dplyr::summarise(portfolio_return = sum(actual_return*weights))
+    dplyr::summarise(portfolio_return = sum(actual_return*weights)) |>
+    dplyr::arrange(date)
       # portfolio_return = weighted.mean(actual_returns, weights))
 
   names(new_portfolio_returns)[names(new_portfolio_returns) == "portfolio_return"] <- model_id
@@ -299,7 +300,8 @@ add_weight_model <- function(portfolio_object, weight_model, weight_config, new_
 #'
 #' @import tidyquant
 #' @import PerformanceAnalytics
-#' @importFrom dplyr group_by pivot_longer
+#' @importFrom dplyr group_by
+#' @importFrom tidyr pivot_longer
 #'
 #' @export
 summary.portfolioReturns <- function(portfolio_object, type=NULL) {
@@ -308,7 +310,7 @@ summary.portfolioReturns <- function(portfolio_object, type=NULL) {
   actual_data <- portfolio_object$actual_returns
     # long_format
   returns_data_long <- returns_data %>%
-    dplyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns")
+    tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns")
   # now we do summary statistics
   if (is.null(type)){
     stats <- perf_met(returns_data, weights_data, actual_data)
@@ -330,21 +332,23 @@ summary.portfolioReturns <- function(portfolio_object, type=NULL) {
 #'
 #' @import ggplot2
 #' @import tidyquant
-#' @importFrom dplyr group_by pivot_longer mutate
+#' @importFrom dplyr group_by mutate
+#' @importFrom tidyr pivot_longer
 #'
 #' @export
 #'
-plot.portfolio <- function(portfolio_object, type = NULL) {
+plot.portfolioReturns <- function(portfolio_object, type = NULL) {
   returns_data <- portfolio_object$portfolio_returns
   weights_data <- portfolio_object$weights
   actual_data <- portfolio_object$actual_returns
   # long_format
   returns_data_long <- returns_data %>%
-    dplyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns")
+    tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns") |>
+    dplyr::arrange(date)
  if (is.null(type)) {
   returns_data_long %>%
     dplyr::group_by(portfolio) |>
-    dplyr::mutate(cum_returns = cumprod(1+returns/100)-1) |>
+    dplyr::mutate(cum_returns = cumprod(1+returns)-1) |>
     ggplot(aes(x = date, y = cum_returns, color = portfolio)) +
     geom_line() +
     theme_grey() +

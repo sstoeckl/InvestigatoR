@@ -43,7 +43,7 @@ quantile_weights <- function(return_predictions, errors, constraints=NULL) {
   }
   weights <- lapply(colnames(return_predictions[-(1:2)]), function(pred_col) {
     pred_data <- return_predictions %>%
-      dplyr::select(stock_id, date, pred=pred_col)
+      dplyr::select(stock_id, date, pred=!!pred_col)
   if (constraints$allow_short_sale) {
     # generate quantile portfolios
     weights <- pred_data %>%
@@ -75,7 +75,7 @@ quantile_weights <- function(return_predictions, errors, constraints=NULL) {
       dplyr::mutate( # apply max/min weights
         weight = pmax(weight, constraints$min_weight)
       ) |>
-      dplyr::ungroup() |>
+      dplyr::group_by(date) |>
       dplyr::mutate( # apply sum constraint
         weight = weight/sum(weight)*constraints$b) |>
       dplyr::ungroup() |>

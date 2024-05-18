@@ -109,19 +109,18 @@ select_dates_by_offset <- function(dates, window_size, step_size, offset, rollin
   return(date_intervals)
 }
 
-#' Helepr function to create performance metrics for a given set of returns, weights, and actual data
+#' Helper function to create performance metrics for a given set of returns, weights, and actual data
 #'
 #' @param returns_data return data
 #' @param weights_data weights data
 #' @param actual_data actual realized returns
 #'
-#' @importFrom dplyr group_by summarise pivot_longer left_join mutate
+#' @importFrom dplyr group_by summarise left_join mutate
 #' @importFrom tidyr pivot_longer
 #'
-#' @return
+#' @return A tibble with columns portfolio, mean, sd, SR, VaR_5, turnover, and hit_ratio
 #' @export
 #'
-#' @examples
 perf_met <- function(returns_data, weights_data, actual_data){
 
   stats <- returns_data |>
@@ -144,5 +143,34 @@ perf_met <- function(returns_data, weights_data, actual_data){
 
   return(stats)
 }
+#' Helper function to find largest number after a certain string
+#'
+#' @param strings vector of strings to search for
+#' @param model_name string to search for the largest number after
+#'
+#' @return The largest number found after the model_name in the strings
+#' @export
+#'
+find_largest_number <- function(strings, model_name) {
+  # Regex to filter strings containing the model_name and extract the last number
+  pattern <- paste0(".*", model_name, "_([0-9]+)$")
 
+  # Filter and extract numbers
+  numbers <- sapply(strings, function(x) {
+    if(grepl(model_name, x)) {
+      matches <- regmatches(x, regexpr(pattern, x))
+      if(length(matches) > 0) {
+        as.numeric(sub(pattern, "\\1", matches))
+      } else {
+        0
+      }
+    } else {
+      0
+    }
+  })
+
+  # Remove NA values and find the maximum number
+  max_number <- max(numbers, na.rm = TRUE)
+  return(max_number)
+}
 

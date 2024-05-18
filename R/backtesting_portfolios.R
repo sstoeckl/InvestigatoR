@@ -35,11 +35,13 @@ backtesting_portfolios <- function(return_prediction_object, portfolio_object = 
 
   # Loop through different weight configurations
   for (i in 2:length(pf_config)) {
+    # i<-2
     cat("Currently processing weight model", i-1, "of", length(pf_config)-1, "\n")
     # extract model name and config
     model_name <- names(pf_config)[i]
 
     for (j in 2:length(pf_config[[model_name]])){
+      # j<-2
       cat("Specifically processing config", j-1, "of", length(pf_config[[model_name]])-1, "\n")
       weight_specs <- pf_config[[model_name]]
       # extract model function and config
@@ -52,6 +54,7 @@ backtesting_portfolios <- function(return_prediction_object, portfolio_object = 
       colnames(new_weights)[-c(1:2)] <- model_ids
 
       for (col in 3:ncol(new_weights)) {
+        # col <- 4
         new_weights_ind <- new_weights |>  dplyr::select(stock_id, date, all_of(col))
         # Store or update the weights in the portfolio object
         portfolio_object <- add_weight_model(portfolio_object, weight_model, weight_config, new_weights_ind)

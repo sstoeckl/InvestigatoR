@@ -87,12 +87,13 @@ xgb_pred <- function(train_data, test_data, config) {
   }
   ## check config
   config <- ensure_config(config, default_params)
-  # add data
-  config$data <- train_matrix
+
 
   train_features <- as.matrix(train_data[,4:ncol(train_data)])
   train_label <- as.matrix(train_data[,3])
   train_matrix <- xgboost::xgb.DMatrix(data = train_features, label = train_label)   # XGB format
+  # add data
+  config$data <- train_matrix
   # do the training
   fit <- do.call(xgboost::xgb.train, config)
   # do the predictions

@@ -25,6 +25,7 @@
 #' @importFrom dplyr bind_rows distinct arrange pull
 #' @importFrom tibble tibble
 #' @import future
+#' @importFrom furrr future_map
 #'
 #'
 #' @export

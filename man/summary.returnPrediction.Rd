@@ -4,12 +4,12 @@
 \alias{summary.returnPrediction}
 \title{Summary method for returnPrediction S3 object}
 \usage{
-\method{summary}{returnPrediction}(object, benchmark = NULL)
+\method{summary}{returnPrediction}(return_prediction_object, benchmark = NULL)
 }
 \arguments{
-\item{object}{returnPrediction object}
-
 \item{benchmark}{Actual returns to compare against (not yet implemented)}
+
+\item{object}{returnPrediction object}
 }
 \value{
 Data frame with error statistics for each model
