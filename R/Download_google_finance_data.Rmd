@@ -1,0 +1,40 @@
+---
+title: "Download google finance data"
+author: "Christian Maruhn"
+date: "2024-05-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Make sure data.table is installed
+if(!'data.table' %in% installed.packages()[,1]) 
+install.packages('data.table')
+
+# Function to fetch google stock data
+google <- function(sym, current = TRUE, sy = 2020, sm = 1, sd = 1, ey, 
+em, ed)
+{
+ if(current){
+system_time <- as.character(Sys.time())
+ey <- as.numeric(substr(system_time, start = 1, stop = 4))
+em <- as.numeric(substr(system_time, start = 6, stop = 7))
+ed <- as.numeric(substr(system_time, start = 9, stop = 10))
+  }
+
+require(data.table)
+
+google_out = tryCatch(
+ suppressWarnings(
+   fread(paste0("http://www.google.com/finance/historical",
+               "?q=", sym,
+               "&startdate=", paste(sm, sd, sy, sep = "+"),
+               "&enddate=", paste(em, ed, ey, sep = "+"),
+               "&output=csv"), sep = ",")),
+ error = function(e) NULL)
+
+if(!is.null(google_out)){
+  names(google_out)[1] = "Date"
+ }
+
+ return(google_out)}
+```
