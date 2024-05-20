@@ -490,24 +490,30 @@ rp_rf$predictions |> head()
 #> # A tibble: 6 × 6
 #>   stock_id date        ols_1  xgb_1 xgb_2   rf_1
 #>      <int> <date>      <dbl>  <dbl> <dbl>  <dbl>
-#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0283
-#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0267
-#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0278
-#> 4       17 2015-03-31 0.0336 0.110  0.223 0.108 
-#> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0563
-#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0593
+#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0284
+#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0283
+#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0306
+#> 4       17 2015-03-31 0.0336 0.110  0.223 0.0883
+#> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0639
+#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0549
 rp_rf_stats <- summary(rp_rf)
 print(rp_rf_stats)
 #>       MSE        RMSE      MAE        Hit_Ratio
 #> ols_1 0.03158888 0.1777326 0.08071823 0.5352989
 #> xgb_1 0.03142746 0.1772779 0.08193929 0.5529501
 #> xgb_2 0.06060931 0.2461896 0.1848615  0.5525796
-#> rf_1  0.03127761 0.1768548 0.08038866 0.5525513
+#> rf_1  0.03127481 0.1768469 0.08038432 0.5524914
 ```
 
 Lets create portfolios again.
 
 ``` r
+pf_config <- list(predictions = c("xgb_2","rf_1"),
+                  quantile_weight = list(pred_func="quantile_weights",
+                    config1=list(quantiles = list(long = 0.20, short = 0.20),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1),
+                    config2=list(quantiles = list(long = 0.10, short = 0.10),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1)))
 pf_rf <- backtesting_portfolios(return_prediction_object = rp_rf, pf_config = pf_config)
 #> Currently processing weight model 1 of 1 
 #> Specifically processing config 1 of 2 
@@ -525,13 +531,11 @@ plot(pf_rf)
 ``` r
 pf_rf_stats <- summary(pf_rf)
 print(pf_rf_stats)
-#> # A tibble: 6 × 6
+#> # A tibble: 4 × 6
 #>   portfolio                  mean     sd    SR   VaR_5 turnover
 #>   <chr>                     <dbl>  <dbl> <dbl>   <dbl>    <dbl>
-#> 1 ols_1_quantile_weights_1 0.0280 0.0773 0.362 -0.0905     93.7
-#> 2 ols_1_quantile_weights_2 0.0352 0.0904 0.389 -0.0995    120. 
-#> 3 xgb_1_quantile_weights_1 0.0287 0.0753 0.382 -0.0915    110. 
-#> 4 xgb_1_quantile_weights_2 0.0385 0.0937 0.411 -0.105     135. 
-#> 5 xgb_2_quantile_weights_1 0.0282 0.0733 0.385 -0.0855     90.1
-#> 6 xgb_2_quantile_weights_2 0.0383 0.0904 0.424 -0.0916    118.
+#> 1 rf_1_quantile_weights_1  0.0283 0.0742 0.381 -0.0891     84.6
+#> 2 rf_1_quantile_weights_2  0.0379 0.0912 0.416 -0.102     111. 
+#> 3 xgb_2_quantile_weights_1 0.0282 0.0733 0.385 -0.0855     90.1
+#> 4 xgb_2_quantile_weights_2 0.0383 0.0904 0.424 -0.0916    118.
 ```

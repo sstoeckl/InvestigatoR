@@ -184,6 +184,12 @@ print(rp_rf_stats)
 Lets create portfolios again.
 
 ```{r backtesting_portfolios_rf}
+pf_config <- list(predictions = c("xgb_2","rf_1"),
+                  quantile_weight = list(pred_func="quantile_weights",
+                    config1=list(quantiles = list(long = 0.20, short = 0.20),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1),
+                    config2=list(quantiles = list(long = 0.10, short = 0.10),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1)))
 pf_rf <- backtesting_portfolios(return_prediction_object = rp_rf, pf_config = pf_config)
 ```
 
