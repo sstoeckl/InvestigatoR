@@ -139,7 +139,58 @@ plot(pf, type = "charts.PerformanceSummary")
 plot(pf, type = "chart.Boxplot")
 ```
 
+# Implement own Functions
 
+Lets start with a simple random forest implementation. We need to specify the function that should be used for the prediction, the configuration of the function, and the name of the function. The logic is easy: create a function "rf_pred" having arguments: 'train_data', 'test_data', as well as a 'config' that is taken by the prediction function.
 
+```{r specify_rf_config}
+rf_config <- list(rf_pred = list(pred_func="rf_pred", 
+                                 config1=list(num.trees=100, max.depth=3, mtry=3)))
+```
 
+Next we implement the prediction function. The function takes the training data, the test data, and the configuration as arguments. The function returns the predicted returns. The function uses the `randomForest` package to fit a random forest model to the training data and to predict the returns for the test data.
 
+```{r implement_rf}
+rf_pred <- function(train_data, test_data, config) {
+  train_features <- (train_data[,4:ncol(train_data)])
+  train_label <- as.matrix(train_data[,3])
+  # add data
+  config$x <- train_features
+  config$y <- train_label
+  # do the training
+  fit <- do.call(ranger::ranger, config)
+  # do the predictions
+  predictions <- as.vector(predict(fit, test_data)$predictions)
+  # match preds back to stock_id and date
+  predictions <- tibble::tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
+  return(predictions)
+}
+```
+
+Finally, we call the backtesting function with the new configuration. The function returns a data frame with the backtesting results. The data frame contains the following columns: date, return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, model, predicted returns, actual realized returns, and errors for all predictions. The model column contains the name of the model that was used for the prediction. The prediction column contains the predicted returns. The actual column contains the actual returns. The error column contains the difference between the predicted and the actual returns. By providing the 'rp' object from before, we add an additional prediction.
+
+```{r backtesting_returns_rf}
+rp_rf <- backtesting_returns(data=data_ml, return_prediction_object=rp,
+   return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, rf_config, append=FALSE, num_cores=NULL)
+```
+Next we chack the prediction summary.
+
+```{r analyse_predictions_rf}
+rp_rf$predictions |> head()
+rp_rf_stats <- summary(rp_rf)
+print(rp_rf_stats)
+```
+
+Lets create portfolios again.
+
+```{r backtesting_portfolios_rf}
+pf_rf <- backtesting_portfolios(return_prediction_object = rp_rf, pf_config = pf_config)
+```
+
+And finally summarise the portfolio statistics.
+
+```{r check_pf_rf}
+plot(pf_rf)
+pf_rf_stats <- summary(pf_rf)
+print(pf_rf_stats)
+```

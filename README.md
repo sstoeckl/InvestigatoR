@@ -219,21 +219,6 @@ library(tidyquant)
 #> 
 #>     as.Date, as.Date.numeric
 #> 
-#> ######################### Warning from 'xts' package ##########################
-#> #                                                                             #
-#> # The dplyr lag() function breaks how base R's lag() function is supposed to  #
-#> # work, which breaks lag(my_xts). Calls to lag(my_xts) that you type or       #
-#> # source() into this session won't work correctly.                            #
-#> #                                                                             #
-#> # Use stats::lag() to make sure you're not using dplyr::lag(), or you can add #
-#> # conflictRules('dplyr', exclude = 'lag') to your .Rprofile to stop           #
-#> # dplyr from breaking base R's lag() function.                                #
-#> #                                                                             #
-#> # Code in packages is not affected. It's protected by R's namespace mechanism #
-#> # Set `options(xts.warn_dplyr_breaks_lag = FALSE)` to suppress this warning.  #
-#> #                                                                             #
-#> ###############################################################################
-#> 
 #> Attache Paket: 'xts'
 #> Die folgenden Objekte sind maskiert von 'package:dplyr':
 #> 
@@ -436,3 +421,117 @@ plot(pf, type = "chart.Boxplot")
 ```
 
 <img src="man/figures/README-plot_pf_tq-3.png" width="100%" />
+
+# Implement own Functions
+
+Lets start with a simple random forest implementation. We need to
+specify the function that should be used for the prediction, the
+configuration of the function, and the name of the function. The logic
+is easy: create a function “rf_pred” having arguments: ‘train_data’,
+‘test_data’, as well as a ‘config’ that is taken by the prediction
+function.
+
+``` r
+rf_config <- list(rf_pred = list(pred_func="rf_pred", 
+                                 config1=list(num.trees=100, max.depth=3, mtry=3)))
+```
+
+Next we implement the prediction function. The function takes the
+training data, the test data, and the configuration as arguments. The
+function returns the predicted returns. The function uses the
+`randomForest` package to fit a random forest model to the training data
+and to predict the returns for the test data.
+
+``` r
+rf_pred <- function(train_data, test_data, config) {
+  train_features <- (train_data[,4:ncol(train_data)])
+  train_label <- as.matrix(train_data[,3])
+  # add data
+  config$x <- train_features
+  config$y <- train_label
+  # do the training
+  fit <- do.call(ranger::ranger, config)
+  # do the predictions
+  predictions <- as.vector(predict(fit, test_data)$predictions)
+  # match preds back to stock_id and date
+  predictions <- tibble::tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
+  return(predictions)
+}
+```
+
+Finally, we call the backtesting function with the new configuration.
+The function returns a data frame with the backtesting results. The data
+frame contains the following columns: date, return_label, features,
+rolling, window_size, step_size, offset, in_sample, ml_config, model,
+predicted returns, actual realized returns, and errors for all
+predictions. The model column contains the name of the model that was
+used for the prediction. The prediction column contains the predicted
+returns. The actual column contains the actual returns. The error column
+contains the difference between the predicted and the actual returns. By
+providing the ‘rp’ object from before, we add an additional prediction.
+
+``` r
+rp_rf <- backtesting_returns(data=data_ml, return_prediction_object=rp,
+   return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, rf_config, append=FALSE, num_cores=NULL)
+#> Currently processing model 1 of 1 
+#> Specifically processing config 1 of 1
+#> Warning: UNRELIABLE VALUE: Future ('<none>') unexpectedly generated random
+#> numbers without specifying argument 'seed'. There is a risk that those random
+#> numbers are not statistically sound and the overall results might be invalid.
+#> To fix this, specify 'seed=TRUE'. This ensures that proper, parallel-safe
+#> random numbers are produced via the L'Ecuyer-CMRG method. To disable this
+#> check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore".
+```
+
+Next we chack the prediction summary.
+
+``` r
+rp_rf$predictions |> head()
+#> # A tibble: 6 × 6
+#>   stock_id date        ols_1  xgb_1 xgb_2   rf_1
+#>      <int> <date>      <dbl>  <dbl> <dbl>  <dbl>
+#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0283
+#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0267
+#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0278
+#> 4       17 2015-03-31 0.0336 0.110  0.223 0.108 
+#> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0563
+#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0593
+rp_rf_stats <- summary(rp_rf)
+print(rp_rf_stats)
+#>       MSE        RMSE      MAE        Hit_Ratio
+#> ols_1 0.03158888 0.1777326 0.08071823 0.5352989
+#> xgb_1 0.03142746 0.1772779 0.08193929 0.5529501
+#> xgb_2 0.06060931 0.2461896 0.1848615  0.5525796
+#> rf_1  0.03127761 0.1768548 0.08038866 0.5525513
+```
+
+Lets create portfolios again.
+
+``` r
+pf_rf <- backtesting_portfolios(return_prediction_object = rp_rf, pf_config = pf_config)
+#> Currently processing weight model 1 of 1 
+#> Specifically processing config 1 of 2 
+#> Specifically processing config 2 of 2
+```
+
+And finally summarise the portfolio statistics.
+
+``` r
+plot(pf_rf)
+```
+
+<img src="man/figures/README-check_pf_rf-1.png" width="100%" />
+
+``` r
+pf_rf_stats <- summary(pf_rf)
+print(pf_rf_stats)
+#> # A tibble: 6 × 6
+#>   portfolio                  mean     sd    SR   VaR_5 turnover
+#>   <chr>                     <dbl>  <dbl> <dbl>   <dbl>    <dbl>
+#> 1 ols_1_quantile_weights_1 0.0280 0.0773 0.362 -0.0905     93.7
+#> 2 ols_1_quantile_weights_2 0.0352 0.0904 0.389 -0.0995    120. 
+#> 3 xgb_1_quantile_weights_1 0.0287 0.0753 0.382 -0.0915    110. 
+#> 4 xgb_1_quantile_weights_2 0.0385 0.0937 0.411 -0.105     135. 
+#> 5 xgb_2_quantile_weights_1 0.0282 0.0733 0.385 -0.0855     90.1
+#> 6 xgb_2_quantile_weights_2 0.0383 0.0904 0.424 -0.0916    118.
+```
