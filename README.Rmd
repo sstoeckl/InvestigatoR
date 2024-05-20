@@ -11,6 +11,7 @@ knitr::opts_chunk$set(
   fig.path = "man/figures/README-",
   out.width = "100%"
 )
+options(xts.warn_dplyr_breaks_lag = FALSE)
 ```
 
 # InvestigatoR
@@ -29,27 +30,116 @@ You can install the development version of InvestigatoR from [GitHub](https://gi
 devtools::install_github("ericschumann12/InvestigatoR")
 ```
 
-## Example
+## Basic Workflow
 
 This is a basic example which shows you how to solve a common problem:
 
-```{r example}
+```{r loaad_package}
 library(InvestigatoR)
+library(tidyverse)
 ## basic example code
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+First we load the complimentary dataset that comes with the package:
 
-```{r cars}
-performance(c(1,2,NA,3))
+```{r load_data}
+data("data_ml")
+data_ml |> distinct(date) |> pull(date) |> min()
+data_ml |> distinct(date) |> pull(date) |> max()
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
+For a description, see.... The original datset was provided by Guillaume Coqueret and Tony Guida with their book [Machine Learning for Factor Investing](https://mlfactor.com).
 
-You can also embed plots, for example:
+Next we specify the set of features that should be used for return prediction, specify some options for backtesting, such as whether the return prediction should be done with a rolling window (TRUE), the window size ("5 years"), the step size("3 months", this means, how often do we reestimate the ML model), the offset ("1 year" to avoid any form of data spillage).
 
-```{r pressure, echo = FALSE}
-plot(pressure)
+```{r specify_features}
+return_label <- "R1M_Usd"
+features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+rolling <- FALSE; window_size= "5 years"; step_size = "1 months"; offset = "1 month"; in_sample = TRUE
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+Next we specify the machine learning configuration. We can specify multiple configurations, for example, one for a linear regression model and one for a gradient boosting model. The configuration for the linear regression model is empty, as we use the default configuration. The configuration for the gradient boosting model specifies the number of rounds, the maximum depth of the trees, the learning rate, and the objective function. Other functions still need to be implemented.
+
+```{r specify_ml_config}
+ ml_config <- list(ols_pred = list(pred_func="ols_pred", config=list()),
+                   xgb_pred = list(pred_func="xgb_pred", 
+                                   config1=list(nrounds=10, max_depth=3, eta=0.3, objective="reg:squarederror"),
+                                   config2=list(nrounds=10, max_depth=3, eta=0.1, objective="reg:squarederror")))
+```
+
+Finally, we call the backtesting function. The function returns a data frame with the backtesting results. The data frame contains the following columns: date, return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, model, predicted returns, actual realized returns, and errors for all predictions. The model column contains the name of the model that was used for the prediction. The prediction column contains the predicted returns. The actual column contains the actual returns. The error column contains the difference between the predicted and the actual returns.
+
+```{r backtesting_returns}
+ rp <- backtesting_returns(data=data_ml, return_prediction_object=NULL,
+   return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
+```
+
+Next we take this predictions and analyse thbeir statistical properties
+
+```{r analyse_predictions}
+rp$predictions |> head()
+rp_stats <- summary(rp)
+print(rp_stats)
+```
+
+Next, we map those predictions into various portfolios (quantiles) and analyse their performance. We specify various weight restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., ols_1, xgb_1, xgb_2). 
+
+
+```{r specify_pf_config}
+pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
+                  quantile_weight = list(pred_func="quantile_weights",
+                    config1=list(quantiles = list(long = 0.20, short = 0.20),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1),
+                    config2=list(quantiles = list(long = 0.10, short = 0.10),allow_short_sale = FALSE,
+                      min_weight = -1,  max_weight = 1, b = 1)))
+```
+
+Finally we run the portfolio formation process.
+
+```{r backtesting_portfolios}
+pf <- backtesting_portfolios(return_prediction_object = rp, pf_config = pf_config)
+```
+Let us check the content of pf, and calculate some summary statistics
+
+```{r check_pf}
+pf$weights |> head()
+pf$portfolio_returns |> head()
+pf_stats <- summary(pf)
+print(pf_stats)
+```
+
+Alternatively, we can also calculate statistics from the `PerformanceAnalytics` package.
+
+
+```{r check_pf_perf}
+library(tidyquant)
+# tidyquant::tq_performance_fun_options()
+summary(pf)
+summary(pf, type = "table.AnnualizedReturns")
+summary(pf, type = "table.Distributions")
+summary(pf, type = "table.DownsideRisk")
+summary(pf, type = "table.DrawdownsRatio")
+summary(pf, type = "cov")
+```
+
+
+Now we plot the corresponding cumulative returns of the portfolios
+
+```{r plot_pf}
+plot(pf)
+```
+
+Alternatively, the plotting function is designed in  a way, that it takes plotting function from the `tidyquant` package as inputs. 
+
+```{r plot_pf_tq, warning=FALSE}
+library(tidyquant)
+ls("package:PerformanceAnalytics")[grepl("chart",ls("package:PerformanceAnalytics"))]
+plot(pf, type = "chart.CumReturns")
+plot(pf, type = "charts.PerformanceSummary")
+plot(pf, type = "chart.Boxplot")
+```
+
+
+
+
+
