@@ -301,7 +301,6 @@ add_weight_model <- function(portfolio_object, weight_model, weight_config, new_
 #'
 #' @return A summary satistics of the portfolio returns
 #'
-#' @import tidyquant
 #' @import PerformanceAnalytics
 #' @importFrom dplyr group_by
 #' @importFrom tidyr pivot_longer
@@ -318,9 +317,11 @@ summary.portfolioReturns <- function(portfolio_object, type=NULL) {
   if (is.null(type)){
     stats <- perf_met(returns_data, weights_data, actual_data)
   } else {
-    stats <- returns_data_long %>%
-      dplyr::group_by(portfolio) |>
-    tidyquant::tq_performance(Ra = returns, performance_fun = type)
+    # User specifies a PerformanceAnalytics plotting function
+    xts_data <- timetk::tk_xts(returns_data)
+    # Call the user-specified PerformanceAnalytics function
+    stat_func <- match.fun(type)
+    stats<-stat_func(xts_data)
   }
 
   return(stats)
@@ -359,7 +360,11 @@ plot.portfolioReturns <- function(portfolio_object, type = NULL) {
     theme(legend.position = "bottom") +
     theme_tq()
   } else {
-    stop("Unsupported plot type.")
+    # User specifies a PerformanceAnalytics plotting function
+    xts_data <- timetk::tk_xts(returns_data)
+    # Call the user-specified PerformanceAnalytics function
+    plot_func <- match.fun(type)
+    plot_func(xts_data)
   }
 }
 # library(cowplot)   # Plot grid management

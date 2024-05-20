@@ -11,6 +11,7 @@ knitr::opts_chunk$set(
   fig.path = "man/figures/README-",
   out.width = "100%"
 )
+options(xts.warn_dplyr_breaks_lag = FALSE)
 ```
 
 # InvestigatoR
@@ -35,6 +36,7 @@ This is a basic example which shows you how to solve a common problem:
 
 ```{r loaad_package}
 library(InvestigatoR)
+library(tidyverse)
 ## basic example code
 ```
 
@@ -42,6 +44,8 @@ First we load the complimentary dataset that comes with the package:
 
 ```{r load_data}
 data("data_ml")
+data_ml |> distinct(date) |> pull(date) |> min()
+data_ml |> distinct(date) |> pull(date) |> max()
 ```
 
 For a description, see.... The original datset was provided by Guillaume Coqueret and Tony Guida with their book [Machine Learning for Factor Investing](https://mlfactor.com).
@@ -104,12 +108,36 @@ pf_stats <- summary(pf)
 print(pf_stats)
 ```
 
-Now we plot the corrsponding cumulative returns of the portfolios
+Alternatively, we can also calculate statistics from the `PerformanceAnalytics` package.
+
+
+```{r check_pf_perf}
+library(tidyquant)
+# tidyquant::tq_performance_fun_options()
+summary(pf)
+summary(pf, type = "table.AnnualizedReturns")
+summary(pf, type = "table.Distributions")
+summary(pf, type = "table.DownsideRisk")
+summary(pf, type = "table.DrawdownsRatio")
+summary(pf, type = "cov")
+```
+
+
+Now we plot the corresponding cumulative returns of the portfolios
 
 ```{r plot_pf}
 plot(pf)
 ```
 
+Alternatively, the plotting function is designed in  a way, that it takes plotting function from the `tidyquant` package as inputs. 
+
+```{r plot_pf_tq, warning=FALSE}
+library(tidyquant)
+ls("package:PerformanceAnalytics")[grepl("chart",ls("package:PerformanceAnalytics"))]
+plot(pf, type = "chart.CumReturns")
+plot(pf, type = "charts.PerformanceSummary")
+plot(pf, type = "chart.Boxplot")
+```
 
 
 
