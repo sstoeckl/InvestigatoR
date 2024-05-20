@@ -1,0 +1,96 @@
+---
+title: "Stock_prices_from_Yahoo_Finance"
+author: "Christian Maruhn"
+date: "2024-05-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+install.packages("quantmod")
+install.packages("tidyquant")
+library(quantmod)
+library(tidyquant)
+```
+
+```{r setup, include=FALSE}
+options("getSymbols.warning4.0" = FALSE)
+options("getSymbols.yahoo.warning" = FALSE)
+
+# Downloading Apple price using quantmod
+getSymbols("AAPL", from = '2017-01-01', to = "2018-03-01", auto.assign = TRUE)
+
+# View the first few rows of the data
+head(AAPL)
+
+# Check the class of the object
+class(AAPL)
+
+# Plot the Apple stock price
+chart_Series(AAPL)
+
+# Zoom in on a specific period
+chart_Series(AAPL['2017-12/2018-03'])
+
+```
+
+```{r setup, include=FALSE}
+tickers <- c("AAPL", "NFLX", "AMZN", "K", "O")
+
+# Download prices
+getSymbols(tickers, from = "2017-01-01", to = "2017-01-15")
+
+# Extract adjusted prices and merge into one object
+prices <- map(tickers, function(x) Ad(get(x)))
+prices <- reduce(prices, merge)
+colnames(prices) <- tickers
+
+# View the first few rows of the merged prices
+head(prices)
+
+# Check the class of the merged prices object
+class(prices)
+```
+
+```{r setup, include=FALSE}
+# Download Apple price using tidyquant
+aapl <- tq_get('AAPL', from = "2017-01-01", to = "2018-03-01", get = "stock.prices")
+
+# View the first few rows of the data
+head(aapl)
+
+# Check the class of the object
+class(aapl)
+
+# Plot the Apple stock price
+aapl %>%
+  ggplot(aes(x = date, y = adjusted)) +
+  geom_line() +
+  theme_classic() +
+  labs(x = 'Date', y = "Adjusted Price", title = "Apple price chart") +
+  scale_y_continuous(breaks = seq(0, 300, 10))
+```
+
+```{r setup, include=FALSE}
+# Define tickers
+tickers <- c("AAPL", "NFLX", "AMZN", "K", "O")
+
+# Download prices
+prices <- tq_get(tickers, from = "2017-01-01", to = "2017-03-01", get = "stock.prices")
+
+# View the first few rows of the data
+head(prices)
+
+# Group by symbol and slice the first row for each symbol
+prices %>%
+  group_by(symbol) %>%
+  slice(1)
+
+# Plot the time series of all prices
+prices %>%
+  ggplot(aes(x = date, y = adjusted, color = symbol)) +
+  geom_line() +
+  facet_wrap(~symbol, scales = 'free_y') +
+  theme_classic() +
+  labs(x = 'Date', y = "Adjusted Price", title = "Price Chart") +
+  scale_x_date(date_breaks = "month", date_labels = "%b\n%y")
+```

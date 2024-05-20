@@ -1,0 +1,199 @@
+---
+title: "Data Vignette for InvestigatoR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data Vignette for InvestigatoR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Introduction
+This vignette demonstrates the use of the `InvestigatoR` package's data set `data_ml.RData`. The dataset comprises information on 1,207 stocks listed in the US (possibly originating from Canada or Mexico). The time range starts in November 1998 and ends in March 2019. For each point in time, 93 characteristics describe the firms in the sample, covering a wide range of topics: valuation, profitability, momentum, risk, estimates, volume, and liquidity.
+
+# Data Description
+The `data_ml.RData` data set includes the following variables:
+
+- `stock_id`: Security ID
+- `date`: Date of the data
+- `Advt_12M_Usd`: Average daily volume in amount in USD over 12 months
+- `Advt_3M_Usd`: Average daily volume in amount in USD over 3 months
+- `Advt_6M_Usd`: Average daily volume in amount in USD over 6 months
+- `Asset_Turnover`: Total sales on average assets
+- `Bb_Yld`: Buyback yield
+- `Bv`: Book value
+- `Capex_Ps_Cf`: Capital expenditure on price to sale cash flow
+- `Capex_Sales`: Capital expenditure on sales
+- `Cash_Div_Cf`: Cash dividends cash flow
+- `Cash_Per_Share`: Cash per share
+- `Cf_Sales`: Cash flow per share
+- `Debtequity`: Debt to equity
+- `Div_Yld`: Dividend yield
+- `Dps`: Dividend per share
+- `Ebit_Bv`: EBIT on book value
+- `Ebit_Noa`: EBIT on non operating asset
+- `Ebit_Oa`: EBIT on operating asset
+- `Ebit_Ta`: EBIT on total asset
+- `Ebitda_Margin`: EBITDA margin
+- `Eps`: Earnings per share
+- `Eps_Basic`: Earnings per share basic
+- `Eps_Basic_Gr`: Earnings per share growth
+- `Eps_Contin_Oper`: Earnings per share continuing operations
+- `Eps_Dil`: Earnings per share diluted
+- `Ev`: Enterprise value
+- `Ev_Ebitda`: Enterprise value on EBITDA
+- `Fa_Ci`: Fixed assets on common equity
+- `Fcf`: Free cash flow
+- `Fcf_Bv`: Free cash flow on book value
+- `Fcf_Ce`: Free cash flow on capital employed
+- `Fcf_Margin`: Free cash flow margin
+- `Fcf_Noa`: Free cash flow on net operating assets
+- `Fcf_Oa`: Free cash flow on operating assets
+- `Fcf_Ta`: Free cash flow on total assets
+- `Fcf_Tbv`: Free cash flow on tangible book value
+- `Fcf_Toa`: Free cash flow on total operating assets
+- `Fcf_Yld`: Free cash flow yield
+- `Free_Ps_Cf`: Free cash flow on price sales
+- `Int_Rev`: Intangibles on revenues
+- `Interest_Expense`: Interest expense coverage
+- `Mkt_Cap_12M_Usd`: Average market capitalization over 12 months in USD
+- `Mkt_Cap_3M_Usd`: Average market capitalization over 3 months in USD
+- `Mkt_Cap_6M_Usd`: Average market capitalization over 6 months in USD
+- `Mom_11M_Usd`: Price momentum 12 - 1 months in USD
+- `Mom_5M_Usd`: Price momentum 6 - 1 months in USD
+- `Mom_Sharp_11M_Usd`: Price momentum 12 - 1 months in USD divided by volatility
+- `Mom_Sharp_5M_Usd`: Price momentum 6 - 1 months in USD divided by volatility
+- `Nd_Ebitda`: Net debt on EBITDA
+- `Net_Debt`: Net debt
+- `Net_Debt_Cf`: Net debt on cash flow
+- `Net_Margin`: Net margin
+- `Netdebtyield`: Net debt yield
+- `Ni`: Net income
+- `Ni_Avail_Margin`: Net income available margin
+- `Ni_Oa`: Net income on operating asset
+- `Ni_Toa`: Net income on total operating asset
+- `Noa`: Net operating asset
+- `Oa`: Operating asset
+- `Ocf`: Operating cash flow
+- `Ocf_Bv`: Operating cash flow on book value
+- `Ocf_Ce`: Operating cash flow on capital employed
+- `Ocf_Margin`: Operating cash flow margin
+- `Ocf_Noa`: Operating cash flow on net operating assets
+- `Ocf_Oa`: Operating cash flow on operating assets
+- `Ocf_Ta`: Operating cash flow on total assets
+- `Ocf_Tbv`: Operating cash flow on tangible book value
+- `Ocf_Toa`: Operating cash flow on total operating assets
+- `Op_Margin`: Operating margin
+- `Op_Prt_Margin`: Net margin 1Y growth
+- `Oper_Ps_Net_Cf`: Cash flow from operations per share net
+- `Pb`: Price to book
+- `Pe`: Price earnings
+- `Ptx_Mgn`: Margin pretax
+- `Recurring_Earning_Total_Assets`: Recurring earnings on total assets
+- `Return_On_Capital`: Return on capital
+- `Rev`: Revenue
+- `Roa`: Return on assets
+- `Roc`: Return on capital
+- `Roce`: Return on capital employed
+- `Roe`: Return on equity
+- `Sales_Ps`: Price to sales
+- `Share_Turn_12M`: Average share turnover 12 months
+- `Share_Turn_3M`: Average share turnover 3 months
+- `Share_Turn_6M`: Average share turnover 6 months
+- `Ta`: Total assets
+- `Tev_Less_Mktcap`: Total enterprise value less market capitalization
+- `Tot_Debt_Rev`: Total debt on revenue
+- `Total_Capital`: Total capital
+- `Total_Debt`: Total debt
+- `Total_Debt_Capital`: Total debt on capital
+- `Total_Liabilities_Total_Assets`: Total liabilities on total assets
+- `Vol1Y_Usd`: Volatility of returns over one year
+- `Vol3Y_Usd`: Volatility of returns over 3 years
+- `R1M_Usd`: Return forward 1 month (LABEL)
+- `R3M_Usd`: Return forward 3 months (LABEL)
+- `R6M_Usd`: Return forward 6 months (LABEL)
+- `R12M_Usd`: Return forward 12 months (LABEL)
+
+# Loading the Data
+To load the data set, use the following code:
+
+```{r}
+library(InvestigatoR)
+load("data_ml.RData")
+head(data_ml)
+```
+
+# Examples
+Here are some examples of analyses you can perform with the `data_ml` dataset.
+
+## Basic Summary
+To get a quick overview of the data:
+
+```{r}
+summary(data_ml)
+```
+
+## Scatter Plot with Color Dimension
+Visualize the relationship between `Net Income` and `Total Assets`, colored by `Return on Equity`:
+
+```{r, fig.width=7, fig.height=3}
+library(ggplot2)
+ggplot(data_ml, aes(x = Ta, y = Ni, color = Roe)) +
+  geom_point(alpha = 0.6) +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Net Income vs Total Assets",
+       x = "Total Assets",
+       y = "Net Income",
+       color = "Return on Equity") +
+  theme_minimal()
+```
+
+## Boxplots
+Create boxplots for selected variables to understand their distribution:
+
+```{r, fig.width=7, fig.height=3}
+# Boxplot for Earnings per Share
+ggplot(data_ml, aes(y = Eps)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Earnings per Share", y = "Earnings per Share") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14))
+
+# Boxplot for Return on Equity
+ggplot(data_ml, aes(y = Roe)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Return on Equity", y = "Return on Equity") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14))
+
+```
+
+## Analyzing Profitability
+You can also perform more complex analyses, such as analyzing the profitability of stocks:
+
+```{r, fig.width=7, fig.height=3}
+# Analyzing Return on Equity (Roe)
+hist(data_ml$Roe, breaks = 50, main = "Distribution of Return on Equity", xlab = "Return on Equity")
+```
+
+## Basic Return Analysis
+Calculate the mean and standard deviation of returns:
+
+```{r}
+mean_return <- mean(data_ml$R1M_Usd, na.rm = TRUE)
+sd_return <- sd(data_ml$R1M_Usd, na.rm = TRUE)
+paste("Mean Return: ", mean_return)
+paste("Standard Deviation of Return: ", sd_return)
+```
+
+## Visualizing Volatility
+Plot the volatility of returns over time for a sample stock:
+
+```{r, fig.width=7, fig.height=3}
+sample_stock <- data_ml[data_ml$stock_id == unique(data_ml$stock_id)[1], ]
+ggplot(sample_stock, aes(x = date, y = Vol1Y_Usd)) +
+  geom_line() +
+  labs(title = "Volatility of Returns Over Time for a Sample Stock", x = "Date", y = "Volatility (1Y USD)")
+```
+
+# Conclusion
+This vignette provided an overview of the `data_ml` dataset included in the `InvestigatoR` package. By following the examples above, users can perform various analyses and visualizations to gain insights into the data.
