@@ -1,4 +1,20 @@
-#'
+---
+title: "Random_forest_predictor"
+author: "Mikhail Zhabin"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
 #' @Title Random Forest Predictor
 #' This function trains a random forest model to predict a target variable based on input features and data
 #' @param y The name of the target variable to predict. Should be a string
@@ -31,3 +47,6 @@
 #'
 #' return(predictions)
 #' }
+
+```
+
