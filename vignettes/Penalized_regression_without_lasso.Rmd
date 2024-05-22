@@ -1,0 +1,66 @@
+---
+title: "Penalized_regression_without_lasso"
+author: "Mikhail Zhabin"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
+#' @title Penalized Regression without Lasso
+#'
+#' @description
+#' This function performs penalized regression using glmnet with a sequence of alpha values ranging from 0 to 1. The alpha parameter in glmnet controls the balance between ridge regression (alpha = 0) and lasso regression (alpha = 1).
+#'
+#' @param y_penalized A vector containing the dependent variable.
+#' @param x_penalized A matrix or dataframe containing the independent variables.
+#'
+#' @return A list containing the fitted models for different alpha values.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Example data
+#' set.seed(123)
+#' x_penalized <- matrix(rnorm(100*10), ncol = 10)
+#' y_penalized <- rnorm(100)
+#'
+#' # Perform penalized regression
+#' models <- penreg(y_penalized, x_penalized)
+#' 
+#' # Access the model fitted with alpha = 0 (ridge regression)
+#' ridge_model <- models[[1]]
+#' 
+#' # Access the model fitted with alpha = 1 (lasso regression)
+#' lasso_model <- models[[11]]
+#' }
+penreg <- function(y_penalized, x_penalized) {
+  # Load required package
+  library(glmnet)
+  
+  # Initialize a list to store fitted models
+  fitted_models <- list()
+  
+  # Perform penalized regression for alpha values ranging from 0 to 1 in increments of 0.1
+  for (alpha in seq(0, 1, by = 0.1)) {
+    # Fit the penalized regression model using glmnet
+    fit_penreg <- glmnet(x_penalized, y_penalized, alpha = alpha)
+    
+    # Store the fitted model in the list with the alpha value as the name
+    fitted_models[[paste0("alpha_", alpha)]] <- fit_penreg
+  }
+  
+  # Return the list of fitted models
+  return(fitted_models)
+}
+
+```
+

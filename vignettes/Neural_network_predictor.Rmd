@@ -1,3 +1,20 @@
+---
+title: "Neural_network_predictor"
+author: "Mikhail Zhabin"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
 #' @Title Neural Network Predictor
 #' This function trains a neural network model to predict stock investment decisions based on input features.
 #' @param train_features Input data for training
@@ -47,3 +64,6 @@
 #'
 #'   return(list(model = model, history = history, predictions = predictions))
 #' }
+
+```
+
