@@ -1,13 +1,13 @@
-#' #change the name to penreg without lasso
-#' #' Title
-#' #'
-#' #' @param y_penalized xy
-#' #' @param x_penalized xy
-#' #'
-#' #' @return xy
-#' #' @export
-#' #'
-#' #' @examples xy
+#'
+#' @Title Penalized Regression without Lasso
+#' This function performs penalized regression using glmnet with a sequence of alpha values ranging from 0 to 1
+#' @param y_penalized A vector containing the dependent variable
+#' @param x_penalized A matrix or dataframe containing the independent variables
+#'
+#' @return A list containing the fitted models for different alpha values
+#' @export
+#'
+#' @examples
 #'
 #' penreg <- function(y_penalized, x_penalized) {
 #'
