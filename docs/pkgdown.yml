@@ -1,11 +1,6 @@
 pandoc: 3.1.1
 pkgdown: 2.0.9
 pkgdown_sha: ~
-articles:
-  data_ml.R-vignette: data_ml.R-vignette.html
-  Download_google_finance_data: Download_google_finance_data.html
-  Fetching and Preparing Financial Data: Fetching and Preparing Financial Data.html
-  Stock_prices_from_Yahoo_Finance_with_comments: Stock_prices_from_Yahoo_Finance_with_comments.html
-  Stock_prices_from_Yahoo_Finance: Stock_prices_from_Yahoo_Finance.html
-last_built: 2024-05-22T19:25Z
+articles: {}
+last_built: 2024-05-22T19:47Z
 
