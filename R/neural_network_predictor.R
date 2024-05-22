@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #' @Title Neural Network Predictor
 #' This function trains a neural network model to predict stock investment decisions based on input features.
 #' @param train_features Input data for training
@@ -10,6 +11,20 @@
 #' @export
 #'
 #' @examples
+=======
+#' #' Title
+#' #'
+#' #' @param train_features xy _ Andi changes smth
+#' #' @param train_labels xy
+#' #' @param test_features xy
+#' #' @param test_labels xy
+#' #' @param epochs xy
+#' #'
+#' #' @return xy
+#' #' @export
+#' #'
+#' #' @examples xy
+>>>>>>> 13dd9b4c5f364e5a08531e1f38e92e3732985bc7
 #' predict_stock <- function(train_features, train_labels, test_features, test_labels, epochs = 50, batches = 32) {
 #'   # Normalize the data
 #'   mean <- apply(train_features, 2, mean)

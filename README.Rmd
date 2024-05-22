@@ -14,25 +14,55 @@ knitr::opts_chunk$set(
 options(xts.warn_dplyr_breaks_lag = FALSE)
 ```
 
-# InvestigatoR
+# InvestigatoR  <a href='https://github.com/ericschumann12/InvestigatoR'><img src='man/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
 
 <!-- badges: start -->
+
+  [![Project Status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+  
 <!-- badges: end -->
 
-The goal of InvestigatoR is to ...
+The goal of InvestigatoR is to provide a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models. It offers:
+- a streamlined workflow for loading data
+- specifying features
+- configuring machine learning models
+- and analyzing the performance of predictions and portfolio strategies. 
+
+This facilitates the evaluation of investment strategies, helping users to optimize returns and manage risks more effectively in their financial models.
+
+It allows the user to retrieve:
+- `backtesting()` a list of results from applying a portfolio mapping function over each out-of-sample date, providing insights into the performance of trading strategies based on specified features and historical data.
+- `backtesting_returns()` a tibble with the stock_id, date and the predicted returns based on Machinelearning that later be used for a trading strategy
+- `backtesting_portfolios()` a portfolio object suitable for further processing with summary or plot for backtesting portfolios given return predictions
+- `helpers()` a tibble with columns training_start, training_end, prediction_start, prediction_end, and prediction_phase
+- `mappers()` a tibble that contains the stock ID, date, and predicted returns. This function acts as a helper to map over indices and apply a specified machine learning model to predict returns, segmenting the data into training and testing sets based on given indices.
+- `neural_network_predictions()` a list containing the trained model, the training history, and the predictions. This function normalizes the feature data, constructs and compiles a neural network model, fits the model to the training data, evaluates its performance on test data, and finally predicts investment decisions (e.g., to invest or not).
+- `penreg_lasso()` a pair of model fits ("fit_lasso" and "fit_ridge"), which are the outcomes of penalized regression models applied to the specified predictor (x_penalized) and response (y_penalized) variables.
+- `portfolio_objects()` a returnPrediction S3 object that organizes stock IDs, dates, actual returns, and placeholders for predictions and errors, facilitating structured tracking and analysis of return predictions.
+- `random_foreest_predictor()` predictions from a random forest model trained on specified features and data, using user-defined settings for the number of trees, node size, sample size, and variables per split.
+- `returnPredictors()` tibble with stock_id, date and pred_return matching the test_data based on the chose of the two primary modeling techniques/functions ("ols_pred()" using an ordinary least squares regression with a choice between a fast implementation with RcppArmadillo or a standard implementation with base R’s lm function or "xgb_pred"()" using an XGBoost model trained with either user-specified settings or default parameters (like learning rate, tree depth, and number of rounds to optimize prediction accuracy)).
+- `weight_functions()`a tibble with stock_id, date, and weights based on predictions with given constraints like "quantile_weights()" where weights are assigned based on quantiles of predictions, allowing for configurations such as allowing short sales, specifying maximum and minimum weights for individual stocks, and adjusting the total weight in long and short positions or "ensemble_weights()", where weights are calculated using different methods such as a simple average of predictions, a weighted average based on the inverse of average errors, or using the covariance of prediction errors to determine the weighting scheme. 
+- `InvestigatoR-package()` a package that provides a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models.
+
+
 
 ## Installation
 
 You can install the development version of InvestigatoR from [GitHub](https://github.com/) with:
-
 ``` r
 # install.packages("devtools")
 devtools::install_github("ericschumann12/InvestigatoR")
 ```
 
-## Basic Workflow
+## Package Contribution
+tbd
+
+
+## Package Usage
 
 This is a basic example which shows you how to solve a common problem:
+
+First we load the `InvestigatoR`-package and the `tidyverse`-package:
 
 ```{r loaad_package}
 library(InvestigatoR)
@@ -40,13 +70,15 @@ library(tidyverse)
 ## basic example code
 ```
 
-First we load the complimentary dataset that comes with the package:
+
+Next we load the complimentary dataset that comes with the package:
 
 ```{r load_data}
 data("data_ml")
 data_ml |> distinct(date) |> pull(date) |> min()
 data_ml |> distinct(date) |> pull(date) |> max()
 ```
+
 
 For a description, see.... The original datset was provided by Guillaume Coqueret and Tony Guida with their book [Machine Learning for Factor Investing](https://mlfactor.com).
 
@@ -58,6 +90,7 @@ features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "
 rolling <- FALSE; window_size= "5 years"; step_size = "1 months"; offset = "1 month"; in_sample = TRUE
 ```
 
+
 Next we specify the machine learning configuration. We can specify multiple configurations, for example, one for a linear regression model and one for a gradient boosting model. The configuration for the linear regression model is empty, as we use the default configuration. The configuration for the gradient boosting model specifies the number of rounds, the maximum depth of the trees, the learning rate, and the objective function. Other functions still need to be implemented.
 
 ```{r specify_ml_config}
@@ -67,12 +100,14 @@ Next we specify the machine learning configuration. We can specify multiple conf
                                    config2=list(nrounds=10, max_depth=3, eta=0.1, objective="reg:squarederror")))
 ```
 
+
 Finally, we call the backtesting function. The function returns a data frame with the backtesting results. The data frame contains the following columns: date, return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, model, predicted returns, actual realized returns, and errors for all predictions. The model column contains the name of the model that was used for the prediction. The prediction column contains the predicted returns. The actual column contains the actual returns. The error column contains the difference between the predicted and the actual returns.
 
 ```{r backtesting_returns}
  rp <- backtesting_returns(data=data_ml, return_prediction_object=NULL,
    return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
 ```
+
 
 Next we take this predictions and analyse thbeir statistical properties
 
@@ -82,8 +117,8 @@ rp_stats <- summary(rp)
 print(rp_stats)
 ```
 
-Next, we map those predictions into various portfolios (quantiles) and analyse their performance. We specify various weight restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., ols_1, xgb_1, xgb_2). 
 
+Next, we map those predictions into various portfolios (quantiles) and analyse their performance. We specify various weight restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., ols_1, xgb_1, xgb_2). 
 
 ```{r specify_pf_config}
 pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
@@ -94,11 +129,14 @@ pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
                       min_weight = -1,  max_weight = 1, b = 1)))
 ```
 
+
 Finally we run the portfolio formation process.
 
 ```{r backtesting_portfolios}
 pf <- backtesting_portfolios(return_prediction_object = rp, pf_config = pf_config)
 ```
+
+
 Let us check the content of pf, and calculate some summary statistics
 
 ```{r check_pf}
@@ -108,8 +146,8 @@ pf_stats <- summary(pf)
 print(pf_stats)
 ```
 
-Alternatively, we can also calculate statistics from the `PerformanceAnalytics` package.
 
+Alternatively, we can also calculate statistics from the `PerformanceAnalytics` package.
 
 ```{r check_pf_perf}
 library(tidyquant)
@@ -129,6 +167,7 @@ Now we plot the corresponding cumulative returns of the portfolios
 plot(pf)
 ```
 
+
 Alternatively, the plotting function is designed in  a way, that it takes plotting function from the `tidyquant` package as inputs. 
 
 ```{r plot_pf_tq, warning=FALSE}
@@ -140,6 +179,15 @@ plot(pf, type = "chart.Boxplot")
 ```
 
 
+### Author/License
+
+- **Investigator Team and Ass.-Prof. Dr. Sebastian Stöckl** - Package Creator, Modifier & Maintainer - [sstoeckl on github](https://github.com/sstoeckl)
+
+This project is licensed under the MIT License - see the
+<license.md> file for details</license.md>
+
+### Acknowledgments
+tbd
 
 
 
