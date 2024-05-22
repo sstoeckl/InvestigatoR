@@ -14,7 +14,7 @@ knitr::opts_chunk$set(
 options(xts.warn_dplyr_breaks_lag = FALSE)
 ```
 
-# InvestigatoR  <a href='https://github.com/ericschumann12/InvestigatoR'><img src='man/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
+# InvestigatoR  <a href='https://github.com/ericschumann12/InvestigatoR'><img src='man/figures/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
 
 <!-- badges: start -->
 
@@ -22,15 +22,20 @@ options(xts.warn_dplyr_breaks_lag = FALSE)
   
 <!-- badges: end -->
 
-The goal of InvestigatoR is to provide a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models. It offers:
-- a streamlined workflow for loading data
-- specifying features
-- configuring machine learning models
-- and analyzing the performance of predictions and portfolio strategies. 
+# "InvestogatoR" that's what she said!
+
+The **goal of InvestigatoR** is to provide a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models. 
+It offers:
+
+- a streamlined *workflow* for loading data
+- specifying *features*
+- configuring *machine learning models*
+- and analyzing the *performance of predictions and portfolio strategies*. 
 
 This facilitates the evaluation of investment strategies, helping users to optimize returns and manage risks more effectively in their financial models.
 
 It allows the user to retrieve:
+
 - `backtesting()` a list of results from applying a portfolio mapping function over each out-of-sample date, providing insights into the performance of trading strategies based on specified features and historical data.
 - `backtesting_returns()` a tibble with the stock_id, date and the predicted returns based on Machinelearning that later be used for a trading strategy
 - `backtesting_portfolios()` a portfolio object suitable for further processing with summary or plot for backtesting portfolios given return predictions
@@ -46,7 +51,7 @@ It allows the user to retrieve:
 
 
 
-## Installation
+# Installation
 
 You can install the development version of InvestigatoR from [GitHub](https://github.com/) with:
 ``` r
@@ -54,11 +59,11 @@ You can install the development version of InvestigatoR from [GitHub](https://gi
 devtools::install_github("ericschumann12/InvestigatoR")
 ```
 
-## Package Contribution
+# Package Contribution
 tbd
 
 
-## Package Usage
+# Package Usage
 
 This is a basic example which shows you how to solve a common problem:
 
