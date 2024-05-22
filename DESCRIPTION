@@ -29,7 +29,8 @@ Authors@R: c(
     person("Eric", "Schumann", , "eric.schumann@uni.li", role = c("aut", "cre")),
     person("Andreas", "Pischetsrieder", , "andreas.pischetsrieder@uni.li", role = c("aut", "cre")),
     person("Christian", "Mahrun", , "christian.mahrun@uni.li", role = "aut")
-    person("Noah", "Veltri", ,"noah.veltri@uni.li", role = "aut")
+    person("Noah", "Veltri", ,"noah.veltri@uni.li", role = "aut"),
+    person("Nicolas", "Baumann", , "nicolas.baumann@uni.li", role = "aut")
   )
 URL: https://github.com/ericschumann12/InvestigatoR
 BugReports: https://github.com/ericschumann12/InvestigatoR/issues
