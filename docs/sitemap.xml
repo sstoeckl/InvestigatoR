@@ -10,6 +10,15 @@
     <loc>/LICENSE.html</loc>
   </url>
   <url>
+    <loc>/articles/Download_google_finance_data.html</loc>
+  </url>
+  <url>
+    <loc>/articles/data_ml.R-vignette.html</loc>
+  </url>
+  <url>
+    <loc>/articles/index.html</loc>
+  </url>
+  <url>
     <loc>/authors.html</loc>
   </url>
   <url>
@@ -22,6 +31,36 @@
     <loc>/reference/InvestigatoR-package.html</loc>
   </url>
   <url>
+    <loc>/reference/add_model_prediction.html</loc>
+  </url>
+  <url>
+    <loc>/reference/add_weight_model.html</loc>
+  </url>
+  <url>
+    <loc>/reference/backtesting_portfolios.html</loc>
+  </url>
+  <url>
+    <loc>/reference/backtesting_returns.html</loc>
+  </url>
+  <url>
+    <loc>/reference/calculate_errors.html</loc>
+  </url>
+  <url>
+    <loc>/reference/convert_period_to_days.html</loc>
+  </url>
+  <url>
+    <loc>/reference/create_portfolios.html</loc>
+  </url>
+  <url>
+    <loc>/reference/create_return_prediction.html</loc>
+  </url>
+  <url>
+    <loc>/reference/ensemble_weights.html</loc>
+  </url>
+  <url>
+    <loc>/reference/find_largest_number.html</loc>
+  </url>
+  <url>
     <loc>/reference/hello.html</loc>
   </url>
   <url>
@@ -31,6 +70,33 @@
     <loc>/reference/my_data.html</loc>
   </url>
   <url>
+    <loc>/reference/ols_pred.html</loc>
+  </url>
+  <url>
+    <loc>/reference/perf_met.html</loc>
+  </url>
+  <url>
     <loc>/reference/performance.html</loc>
+  </url>
+  <url>
+    <loc>/reference/plot.portfolioReturns.html</loc>
+  </url>
+  <url>
+    <loc>/reference/quantile_weights.html</loc>
+  </url>
+  <url>
+    <loc>/reference/retpred_map.html</loc>
+  </url>
+  <url>
+    <loc>/reference/select_dates_by_offset.html</loc>
+  </url>
+  <url>
+    <loc>/reference/summary.portfolioReturns.html</loc>
+  </url>
+  <url>
+    <loc>/reference/summary.returnPrediction.html</loc>
+  </url>
+  <url>
+    <loc>/reference/xgb_pred.html</loc>
   </url>
 </urlset>
