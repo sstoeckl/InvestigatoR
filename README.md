@@ -1,14 +1,92 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# InvestigatoR
+# InvestigatoR <a href='https://github.com/ericschumann12/InvestigatoR'><img src='man/figures/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
 
 <!-- badges: start -->
+
+[![Project
+Status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+
 <!-- badges: end -->
 
-The goal of InvestigatoR is to …
+# “InvestogatoR” that’s what she said!
 
-## Installation
+The **goal of InvestigatoR** is to provide a comprehensive toolkit for
+quantitative finance professionals and researchers to conduct advanced
+backtesting and portfolio analysis using machine learning models. It
+offers:
+
+- a streamlined *workflow* for loading data
+- specifying *features*
+- configuring *machine learning models*
+- and analyzing the *performance of predictions and portfolio
+  strategies*.
+
+This facilitates the evaluation of investment strategies, helping users
+to optimize returns and manage risks more effectively in their financial
+models.
+
+It allows the user to retrieve:
+
+- `backtesting()` a list of results from applying a portfolio mapping
+  function over each out-of-sample date, providing insights into the
+  performance of trading strategies based on specified features and
+  historical data.
+- `backtesting_returns()` a tibble with the stock_id, date and the
+  predicted returns based on Machinelearning that later be used for a
+  trading strategy
+- `backtesting_portfolios()` a portfolio object suitable for further
+  processing with summary or plot for backtesting portfolios given
+  return predictions
+- `helpers()` a tibble with columns training_start, training_end,
+  prediction_start, prediction_end, and prediction_phase
+- `mappers()` a tibble that contains the stock ID, date, and predicted
+  returns. This function acts as a helper to map over indices and apply
+  a specified machine learning model to predict returns, segmenting the
+  data into training and testing sets based on given indices.
+- `neural_network_predictions()` a list containing the trained model,
+  the training history, and the predictions. This function normalizes
+  the feature data, constructs and compiles a neural network model, fits
+  the model to the training data, evaluates its performance on test
+  data, and finally predicts investment decisions (e.g., to invest or
+  not).
+- `penreg_lasso()` a pair of model fits (“fit_lasso” and “fit_ridge”),
+  which are the outcomes of penalized regression models applied to the
+  specified predictor (x_penalized) and response (y_penalized)
+  variables.
+- `portfolio_objects()` a returnPrediction S3 object that organizes
+  stock IDs, dates, actual returns, and placeholders for predictions and
+  errors, facilitating structured tracking and analysis of return
+  predictions.
+- `random_foreest_predictor()` predictions from a random forest model
+  trained on specified features and data, using user-defined settings
+  for the number of trees, node size, sample size, and variables per
+  split.
+- `returnPredictors()` tibble with stock_id, date and pred_return
+  matching the test_data based on the chose of the two primary modeling
+  techniques/functions (“ols_pred()” using an ordinary least squares
+  regression with a choice between a fast implementation with
+  RcppArmadillo or a standard implementation with base R’s lm function
+  or “xgb_pred”()” using an XGBoost model trained with either
+  user-specified settings or default parameters (like learning rate,
+  tree depth, and number of rounds to optimize prediction accuracy)).
+- `weight_functions()`a tibble with stock_id, date, and weights based on
+  predictions with given constraints like “quantile_weights()” where
+  weights are assigned based on quantiles of predictions, allowing for
+  configurations such as allowing short sales, specifying maximum and
+  minimum weights for individual stocks, and adjusting the total weight
+  in long and short positions or “ensemble_weights()”, where weights are
+  calculated using different methods such as a simple average of
+  predictions, a weighted average based on the inverse of average
+  errors, or using the covariance of prediction errors to determine the
+  weighting scheme.
+- `InvestigatoR-package()` a package that provides a comprehensive
+  toolkit for quantitative finance professionals and researchers to
+  conduct advanced backtesting and portfolio analysis using machine
+  learning models.
+
+# Installation
 
 You can install the development version of InvestigatoR from
 [GitHub](https://github.com/) with:
@@ -18,9 +96,15 @@ You can install the development version of InvestigatoR from
 devtools::install_github("ericschumann12/InvestigatoR")
 ```
 
-## Basic Workflow
+# Package Contribution
+
+tbd
+
+# Package Usage
 
 This is a basic example which shows you how to solve a common problem:
+
+First we load the `InvestigatoR`-package and the `tidyverse`-package:
 
 ``` r
 library(InvestigatoR)
@@ -35,14 +119,13 @@ library(tidyverse)
 #> ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
 #> ✔ purrr     1.0.2
 #> ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-#> ✖ purrr::%||%()   masks base::%||%()
 #> ✖ dplyr::filter() masks stats::filter()
 #> ✖ dplyr::lag()    masks stats::lag()
 #> ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
 ## basic example code
 ```
 
-First we load the complimentary dataset that comes with the package:
+Next we load the complimentary dataset that comes with the package:
 
 ``` r
 data("data_ml")
@@ -210,41 +293,26 @@ Alternatively, we can also calculate statistics from the
 
 ``` r
 library(tidyquant)
-#> Lade nötiges Paket: PerformanceAnalytics
-#> Lade nötiges Paket: xts
-#> Lade nötiges Paket: zoo
+#> Loading required package: PerformanceAnalytics
+#> Loading required package: xts
+#> Loading required package: zoo
 #> 
-#> Attache Paket: 'zoo'
-#> Die folgenden Objekte sind maskiert von 'package:base':
+#> Attaching package: 'zoo'
+#> The following objects are masked from 'package:base':
 #> 
 #>     as.Date, as.Date.numeric
 #> 
-#> ######################### Warning from 'xts' package ##########################
-#> #                                                                             #
-#> # The dplyr lag() function breaks how base R's lag() function is supposed to  #
-#> # work, which breaks lag(my_xts). Calls to lag(my_xts) that you type or       #
-#> # source() into this session won't work correctly.                            #
-#> #                                                                             #
-#> # Use stats::lag() to make sure you're not using dplyr::lag(), or you can add #
-#> # conflictRules('dplyr', exclude = 'lag') to your .Rprofile to stop           #
-#> # dplyr from breaking base R's lag() function.                                #
-#> #                                                                             #
-#> # Code in packages is not affected. It's protected by R's namespace mechanism #
-#> # Set `options(xts.warn_dplyr_breaks_lag = FALSE)` to suppress this warning.  #
-#> #                                                                             #
-#> ###############################################################################
-#> 
-#> Attache Paket: 'xts'
-#> Die folgenden Objekte sind maskiert von 'package:dplyr':
+#> Attaching package: 'xts'
+#> The following objects are masked from 'package:dplyr':
 #> 
 #>     first, last
 #> 
-#> Attache Paket: 'PerformanceAnalytics'
-#> Das folgende Objekt ist maskiert 'package:graphics':
+#> Attaching package: 'PerformanceAnalytics'
+#> The following object is masked from 'package:graphics':
 #> 
 #>     legend
-#> Lade nötiges Paket: quantmod
-#> Lade nötiges Paket: TTR
+#> Loading required package: quantmod
+#> Loading required package: TTR
 # tidyquant::tq_performance_fun_options()
 summary(pf)
 #> # A tibble: 6 × 6
@@ -436,3 +504,16 @@ plot(pf, type = "chart.Boxplot")
 ```
 
 <img src="man/figures/README-plot_pf_tq-3.png" width="100%" />
+
+### Author/License
+
+- **Investigator Team and Ass.-Prof. Dr. Sebastian Stöckl** - Package
+  Creator, Modifier & Maintainer - [sstoeckl on
+  github](https://github.com/sstoeckl)
+
+This project is licensed under the MIT License - see the \<license.md\>
+file for details\</license.md\>
+
+### Acknowledgments
+
+tbd
