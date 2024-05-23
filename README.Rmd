@@ -22,7 +22,7 @@ options(xts.warn_dplyr_breaks_lag = FALSE)
   
 <!-- badges: end -->
 
-# "InvestogatoR" that's what she said!
+# "InvestigatoR" that's what she said!
 
 The **goal of InvestigatoR** is to provide a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models. 
 It offers:

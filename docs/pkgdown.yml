@@ -1,6 +1,22 @@
 pandoc: 3.1.1
 pkgdown: 2.0.9
 pkgdown_sha: ~
-articles: {}
-last_built: 2024-05-22T19:47Z
+articles:
+  Backtesting_portfolios: Backtesting_portfolios.html
+  Backtesting_returns: Backtesting_returns.html
+  Code for Data combined: Code for Data combined.html
+  data_ml.R-vignette: data_ml.R-vignette.html
+  Download_google_finance_data: Download_google_finance_data.html
+  Fetching and Preparing Financial Data: Fetching and Preparing Financial Data.html
+  Helper_function: Helper_function.html
+  Mappers: Mappers.html
+  Neural_network_predictor: Neural_network_predictor.html
+  Penalized_regression_without_lasso: Penalized_regression_without_lasso.html
+  Portfolio_objects: Portfolio_objects.html
+  Random_forest_predictor: Random_forest_predictor.html
+  Return_predictors: Return_predictors.html
+  Stock_prices_from_Yahoo_Finance_with_comments: Stock_prices_from_Yahoo_Finance_with_comments.html
+  Stock_prices_from_Yahoo_Finance: Stock_prices_from_Yahoo_Finance.html
+  Weight_functions: Weight_functions.html
+last_built: 2024-05-23T07:07Z
 

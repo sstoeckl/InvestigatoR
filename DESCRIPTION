@@ -30,7 +30,7 @@ Authors@R: c(
     person("Andreas", "Pischetsrieder", , "andreas.pischetsrieder@uni.li", role = c("aut", "cre")),
     person("Christian", "Mahrun", , "christian.mahrun@uni.li", role = "aut"),
     person("Noah", "Veltri", ,"noah.veltri@uni.li", role = "aut"),
-    person("Nicolas", "Baumann", , "nicolas.baumann@uni.li", role = "aut")
+    person("Nicolas", "Baumann", , "nicolas.baumann@uni.li", role = "aut"),
     person("Aziza", "Ouali", , "aziza.ouali@uni.li", role = "aut"),
     person("Nazim", "Yigitoglu", , "nazim.yigitoglu@uni.li", role = "aut"),
     person("Mikhail", "Zhabin", , "mikhail.zhabin@uni.li", role = "aut"),
