@@ -1,8 +1,10 @@
 ---
-title: "Code for Data combined"
-author: "Christian Maruhn"
-date: "2024-05-16"
-output: html_document
+title: "Code for Data combineds"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Fetching and Preparing Financial Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE}

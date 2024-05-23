@@ -1,8 +1,10 @@
 ---
 title: "Stock_prices_from_Yahoo_Finance_with_comments"
-author: "Christian Maruhn"
-date: "2024-05-19"
-output: html_document
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Fetching and Preparing Financial Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE}
