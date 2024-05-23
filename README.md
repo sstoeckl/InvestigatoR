@@ -10,7 +10,7 @@ Status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repost
 
 <!-- badges: end -->
 
-# “InvestogatoR” that’s what she said!
+# “InvestigatoR” that’s what she said!
 
 The **goal of InvestigatoR** is to provide a comprehensive toolkit for
 quantitative finance professionals and researchers to conduct advanced
