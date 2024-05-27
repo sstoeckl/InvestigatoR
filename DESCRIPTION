@@ -28,7 +28,7 @@ Authors@R: c(
     person(, role = "ctb"),
     person("Eric", "Schumann", , "eric.schumann@uni.li", role = c("aut", "cre")),
     person("Andreas", "Pischetsrieder", , "andreas.pischetsrieder@uni.li", role = c("aut", "cre")),
-    person("Christian", "Mahrun", , "christian.mahrun@uni.li", role = "aut")
+    person("Christian", "Maruhn", , "christian.maruhn@uni.li", role = "aut")
   )
 URL: https://github.com/ericschumann12/InvestigatoR
 BugReports: https://github.com/ericschumann12/InvestigatoR/issues
