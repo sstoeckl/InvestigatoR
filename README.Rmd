@@ -51,17 +51,15 @@ More in detail, the package allows the user to create:
     - `rf_pred`: predicts returns using random forests
 
 In the future we plan a major upgrade to the function to be able to handle caret models as well as other machine learning models.
-- `portfolioReturns`: Another S3 object that contains the results of the backtesting strategy for a portfolio. The object contains (i) information on the weight creation strategy and function used, including possible constraints and parameters, (ii) the weights created per asset and date, (iii) the actual asset returns and (iv) the (automatically calculated) portfolio returns. Using `summary()` on this object will produce common performance statistics (mean, stanjdard deviation, Share Ratio, VaR, turnover), but can also handle almost all `PerformanceAnalytics` functions and tables. An additional `plot` routine will produce a cumulative return plot of the portfolio, but can also handle various predefined plots from the `PerformanceAnalytics` package.
-- `backtesting_portfolio()`: This function is the second major work horse of the package. It uses the predictions contained in a `returnPrediction` object to create portfolio weights implementing various constraints
+- `portfolioReturns`: Another S3 object that contains the results of the backtesting strategy for a portfolio. The object contains (i) information on the weight creation strategy and function used, including possible constraints and parameters, (ii) the weights created per asset and date, (iii) the actual asset returns and (iv) the (automatically calculated) portfolio returns. Using `summary()` on this object will produce common performance statistics (mean, standard deviation, Share Ratio, VaR, turnover), but can also handle almost all `PerformanceAnalytics` functions and tables. An additional `plot` routine will produce a cumulative return plot of the portfolio, but can also handle various predefined plots from the `PerformanceAnalytics` package.
+- `backtesting_portfolio()`: This function is the second major work horse of the package. It uses the predictions contained in a `returnPrediction` object to create portfolio weights implementing various constraints and strategies. It also allows for different holding periods, such as daily, weekly, monthly, and yearly. The function adds the portfolio weights and all necessary information to the `portfolioReturns` S3 object. Currently implemented portfolio functions:
 
-
-
-lculates the returns of a portfolio strategy based on the predictions. The function allows for different portfolio strategies, such as long-short, long-only, short-only, and equal-weighted. The function also allows for different holding periods, such as daily, weekly, monthly, and yearly. The function returns a data frame with the returns of the portfolio strategy.
-
-
-
-
-
+    - `quantile_weights`: creates quantile portfolio weights based on the predictions
+    - `ensemble_weights`: creates ensemble portfolio weights based on several predictions using a 
+        -  simple average, a 
+        -  weighted average based on the inverse MSE, or a 
+        -  Minimum Variance approach using the covariance matrix of errors.
+The function returns a `portfolioReturns` object that can be used for further analysis.
 
 # Installation
 
@@ -74,22 +72,19 @@ devtools::install_github("sstoeckl/InvestigatoR")
 
 # Package History
 
-
-
-
-
+-  0.2.0: Major update of all functions, complete rewriting of package structure.
 
 # Package Usage
 
-This is a basic example which shows you how to solve a common problem:
+This is a basic example which shows you how to solve a common problem. First, we load the `InvestigatoR`-package and the `tidyverse`-package:
 
-```{r loaad_package}
+```{r load_package, message=FALSE, warning=FALSE}
 library(InvestigatoR)
 library(tidyverse)
 ## basic example code
 ```
 
-First we load the complimentary dataset that comes with the package:
+Next, we load the complimentary dataset that comes with the package:
 
 ```{r load_data}
 data("data_ml")
@@ -99,7 +94,7 @@ data_ml |> distinct(date) |> pull(date) |> max()
 
 For a description, see.... The original datset was provided by Guillaume Coqueret and Tony Guida with their book [Machine Learning for Factor Investing](https://mlfactor.com).
 
-Next we specify the set of features that should be used for return prediction, specify some options for backtesting, such as whether the return prediction should be done with a rolling window (TRUE), the window size ("5 years"), the step size("3 months", this means, how often do we reestimate the ML model), the offset ("1 year" to avoid any form of data spillage).
+Next we specify the set of features that should be used for return prediction, specify some options for backtesting, such as whether the return prediction should be done with a rolling window (TRUE), the window size ("5 years"), the step size("3 months", this means, how often do we re-estimate the ML model), the offset ("1 year" to avoid any form of data spillage).
 
 ```{r specify_features}
 return_label <- "R1M_Usd"
@@ -116,14 +111,14 @@ Next we specify the machine learning configuration. We can specify multiple conf
                                    config2=list(nrounds=10, max_depth=3, eta=0.1, objective="reg:squarederror")))
 ```
 
-Finally, we call the backtesting function. The function returns a data frame with the backtesting results. The data frame contains the following columns: date, return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, model, predicted returns, actual realized returns, and errors for all predictions. The model column contains the name of the model that was used for the prediction. The prediction column contains the predicted returns. The actual column contains the actual returns. The error column contains the difference between the predicted and the actual returns.
+Finally, we call the backtesting function. 
 
 ```{r backtesting_returns}
  rp <- backtesting_returns(data=data_ml, return_prediction_object=NULL,
    return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
 ```
 
-Next we take this predictions and analyse their statistical properties
+The function returns an S3 object of class `returnPrediction` that contains all the information associated with the backtesting results. It contains information on the used models (`rp$models`), the predictions (`rp$predictions`), as well as the actual returns (`rp$actual_returns`) and the errors (`rp$errors`). We provide a summary routine via `summary()` that calculates the Mean-Squared-Error (MSE), the Root-Mean-Squared-Error (RMSE), the Mean-Absolute-Error (MAE), and the Hit-Ratio (the percentage of correct predictions).
 
 ```{r analyse_predictions}
 rp$predictions |> head()
@@ -131,7 +126,8 @@ rp_stats <- summary(rp)
 print(rp_stats)
 ```
 
-Next, we map those predictions into various portfolios (quantiles) and analyse their performance. We specify various weight restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., ols_1, xgb_1, xgb_2). 
+Next, we map those predictions into various portfolios (quantiles) and analyse their performance. Therefore, we specify a mapping_function (can be individually provided), and a portfolio configuration. The mapping function is a function that maps the predictions into portfolio weights. We provide two functions, `quantile_weights` and `ensemble_weights`. The portfolio configuration specifies the quantiles that should be used for the portfolio formation, as well as various constraints and parameters. Additionally we can specify various portfolio restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., 'ols_1', 'xgb_1', 'xgb_2').
+
 
 ```{r specify_pf_config}
 pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
@@ -147,7 +143,10 @@ Finally we run the portfolio formation process.
 ```{r backtesting_portfolios}
 pf <- backtesting_portfolios(return_prediction_object = rp, pf_config = pf_config)
 ```
-Let us check the content of pf, and calculate some summary statistics
+This creates another S3 object of class `portfolio` that contains all the information associated with the portfolio formation. It contains information on the portfolio models used (`pf$weight_models`), the actual returns of the assets (`pf$actual_returns`), the portfolio returns (`pf$portfolio_returns`). We provide a summary routine via `summary()` that calculates the Mean, Standard Deviation, Sharpe Ratio, Maximum Drawdown, and the Calmar Ratio.
+
+
+), the portfolio weights (`pf$weights`), the actual returns of the assets (`pf$actual_returns`), the portfolio returns (`pf$portfolio_returns`). We provide a summary routine via `summary()` that calculates the Mean, Standard Deviation, Sharpe Ratio, Value at Risk, as well as the turnover.
 
 ```{r check_pf}
 pf$weights |> head()
@@ -157,7 +156,6 @@ print(pf_stats)
 ```
 
 Alternatively, we can also calculate statistics from the `PerformanceAnalytics` package.
-
 
 ```{r check_pf_perf}
 library(tidyquant)
@@ -171,7 +169,7 @@ summary(pf, type = "cov")
 ```
 
 
-Now we plot the corresponding cumulative returns of the portfolios
+Additionally, we provide a standard plotting routine for the portfolio object via `plot`.
 
 ```{r plot_pf}
 plot(pf)
@@ -189,14 +187,14 @@ plot(pf, type = "chart.Boxplot")
 
 # Implement own Functions
 
-Lets start with a simple random forest implementation. We need to specify the function that should be used for the prediction, the configuration of the function, and the name of the function. The logic is easy: create a function "rf_pred" having arguments: 'train_data', 'test_data', as well as a 'config' that is taken by the prediction function.
+Lets start with a simple random forest implementation. We need to specify the function that should be used for the prediction, the configuration of the function, and the name of the function. The logic is easy: create a function `rf_pred` having arguments: 'train_data', 'test_data', as well as a 'config' that is taken by the prediction function.
 
 ```{r specify_rf_config}
 rf_config <- list(rf_pred = list(pred_func="rf_pred", 
                                  config1=list(num.trees=100, max.depth=3, mtry=3)))
 ```
 
-Next we implement the prediction function. The function takes the training data, the test data, and the configuration as arguments. The function returns the predicted returns. The function uses the `randomForest` package to fit a random forest model to the training data and to predict the returns for the test data.
+Next we implement this prediction function. The function takes the training data, the test data, and the configuration as arguments and returns the predicted returns. It uses the `ranger` package to fit a random forest model to the training data and to predict the returns for the test data.
 
 ```{r implement_rf}
 rf_pred <- function(train_data, test_data, config) {
@@ -215,13 +213,13 @@ rf_pred <- function(train_data, test_data, config) {
 }
 ```
 
-Finally, we call the backtesting function with the new configuration. The function returns a data frame with the backtesting results. The data frame contains the following columns: date, return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, model, predicted returns, actual realized returns, and errors for all predictions. The model column contains the name of the model that was used for the prediction. The prediction column contains the predicted returns. The actual column contains the actual returns. The error column contains the difference between the predicted and the actual returns. By providing the 'rp' object from before, we add an additional prediction.
+Finally, we call the `backtesting_returns` function with the new configuration. The function returns a data frame with the backtesting results and appends them to the existing return prediction object 'rf'.
 
 ```{r backtesting_returns_rf}
 rp_rf <- backtesting_returns(data=data_ml, return_prediction_object=rp,
    return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, rf_config, append=FALSE, num_cores=NULL)
 ```
-Next we chack the prediction summary.
+We can check, whether the random forest produces better predictions than the other models:
 
 ```{r analyse_predictions_rf}
 rp_rf$predictions |> head()
@@ -229,7 +227,7 @@ rp_rf_stats <- summary(rp_rf)
 print(rp_rf_stats)
 ```
 
-Lets create portfolios again.
+Let us recreate the portfolio formation process with the new prediction object.
 
 ```{r backtesting_portfolios_rf}
 pf_config <- list(predictions = c("xgb_2","rf_1"),
@@ -248,3 +246,14 @@ plot(pf_rf)
 pf_rf_stats <- summary(pf_rf)
 print(pf_rf_stats)
 ```
+
+### Author/License
+
+- **Investigator Team and Ass.-Prof. Dr. Sebastian Stöckl** - Package Creator, Modifier & Maintainer - [sstoeckl on github](https://github.com/sstoeckl)
+
+This project is licensed under the MIT License - see the <license.md> file for details</license.md>
+
+### Acknowledgments
+
+This project is the result of a large effort of my students that participated in the "Machine Learning in Finance II" course at the University of Liechtenstein in Summer 2024. In particluar, this are Eric Schumann, Andreas Pischetsrieder, Christian Mahrun, Noah Veltri, Nicolas Baumann, Aziza Ouali, Nazim Yigitoglu, and Mikhail Zhabin.
+

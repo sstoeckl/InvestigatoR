@@ -1,48 +1,125 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# InvestigatoR
+# InvestigatoR <a href='https://github.com/sstoeckl/InvestigatoR'><img src='man/figures/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
 
 <!-- badges: start -->
+
+[![Project
+Status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+<!-- [![CRAN_latest_release_date](https://www.r-pkg.org/badges/last-release/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+<!-- [![CRAN status](https://www.r-pkg.org/badges/version/InvestigatoR)](https://CRAN.R-project.org/package=InvestigatoR) -->
+<!-- [![CRAN downloads](http://cranlogs.r-pkg.org/badges/grand-total/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+<!-- [![CRAN downloads last month](http://cranlogs.r-pkg.org/badges/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+<!-- [![CRAN downloads last week](http://cranlogs.r-pkg.org/badges/last-week/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+<!-- [![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable) -->
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![Website -
+pkgdown](https://img.shields.io/website-up-down-green-red/https/sstoeckl.github.io/InvestigatoR.svg)](https://sstoeckl.github.io/InvestigatoR/)
 <!-- badges: end -->
 
-The goal of InvestigatoR is to …
+# “InvestigatoR” that’s what she said!
 
-## Installation
+The **goal of InvestigatoR** is to provide a comprehensive toolkit for
+quantitative finance professionals and researchers to conduct advanced
+backtesting and portfolio analysis using machine learning models.
+
+It offers:
+
+- a streamlined *workflow* for loading data
+- specifying *features*
+- configuring *machine learning models*
+- and analyzing the *performance of predictions and portfolio
+  strategies*.
+
+This facilitates the evaluation of investment strategies, helping users
+to optimize returns and manage risks more effectively in their financial
+models.
+
+More in detail, the package allows the user to create:
+
+- `returnPrediction`: An S3 object that contains the results of the
+  backtesting strategy for predicting stock returns. One can
+  subsequently try different prediction algorithms and all save them in
+  the same object. The object then contains, (i) information on the
+  algorithm and parameters used, (ii) the predictions, (iii) the real
+  returns as well as (iv) the respective errors. Using `summary()` on
+  this object will produce common error statistics (MSE, RMSE, MAE, …).
+
+- `backtesting_returns()`: This function is one of the major workhorses
+  of the package. It predicts a label (mostly the returns, but can also
+  be other labels, such as the volatility) for a set of given assets and
+  dates based on available features. The function allows for different
+  machine learning algorithms, some are pre-implemented, such as linear
+  regression, gradient boosting, and random forests, others can easily
+  be added (see `vignette("custom_predictions")`). It contains a large
+  variety of configuration options, such as rolling or expanding
+  windows, window sizes, step sizes, and offsets. The function adds
+  predictions and all necessary information to the `returnPrediction` S3
+  object. Currently implemented prediction functions:
+
+  - `ols_pred`: predicts returns using simple linear regression
+  - `xgb_pred`: predicts returns using gradient boosted trees
+  - `rf_pred`: predicts returns using random forests
+
+In the future we plan a major upgrade to the function to be able to
+handle caret models as well as other machine learning models. -
+`portfolioReturns`: Another S3 object that contains the results of the
+backtesting strategy for a portfolio. The object contains (i)
+information on the weight creation strategy and function used, including
+possible constraints and parameters, (ii) the weights created per asset
+and date, (iii) the actual asset returns and (iv) the (automatically
+calculated) portfolio returns. Using `summary()` on this object will
+produce common performance statistics (mean, standard deviation, Share
+Ratio, VaR, turnover), but can also handle almost all
+`PerformanceAnalytics` functions and tables. An additional `plot`
+routine will produce a cumulative return plot of the portfolio, but can
+also handle various predefined plots from the `PerformanceAnalytics`
+package. - `backtesting_portfolio()`: This function is the second major
+work horse of the package. It uses the predictions contained in a
+`returnPrediction` object to create portfolio weights implementing
+various constraints and strategies. It also allows for different holding
+periods, such as daily, weekly, monthly, and yearly. The function adds
+the portfolio weights and all necessary information to the
+`portfolioReturns` S3 object. Currently implemented portfolio functions:
+
+    - `quantile_weights`: creates quantile portfolio weights based on the predictions
+    - `ensemble_weights`: creates ensemble portfolio weights based on several predictions using a 
+        -  simple average, a 
+        -  weighted average based on the inverse MSE, or a 
+        -  Minimum Variance approach using the covariance matrix of errors.
+
+The function returns a `portfolioReturns` object that can be used for
+further analysis.
+
+# Installation
 
 You can install the development version of InvestigatoR from
 [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("ericschumann12/InvestigatoR")
+devtools::install_github("sstoeckl/InvestigatoR")
 ```
 
-## Basic Workflow
+# Package History
 
-This is a basic example which shows you how to solve a common problem:
+- 0.2.0: Major update of all functions, complete rewriting of package
+  structure.
+
+# Package Usage
+
+This is a basic example which shows you how to solve a common problem.
+First, we load the `InvestigatoR`-package and the `tidyverse`-package:
 
 ``` r
 library(InvestigatoR)
-#> Registered S3 method overwritten by 'quantmod':
-#>   method            from
-#>   as.zoo.data.frame zoo
 library(tidyverse)
-#> ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
-#> ✔ dplyr     1.1.4     ✔ readr     2.1.5
-#> ✔ forcats   1.0.0     ✔ stringr   1.5.1
-#> ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
-#> ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
-#> ✔ purrr     1.0.2
-#> ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-#> ✖ purrr::%||%()   masks base::%||%()
-#> ✖ dplyr::filter() masks stats::filter()
-#> ✖ dplyr::lag()    masks stats::lag()
-#> ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
 ## basic example code
 ```
 
-First we load the complimentary dataset that comes with the package:
+Next, we load the complimentary dataset that comes with the package:
 
 ``` r
 data("data_ml")
@@ -60,7 +137,7 @@ Next we specify the set of features that should be used for return
 prediction, specify some options for backtesting, such as whether the
 return prediction should be done with a rolling window (TRUE), the
 window size (“5 years”), the step size(“3 months”, this means, how often
-do we reestimate the ML model), the offset (“1 year” to avoid any form
+do we re-estimate the ML model), the offset (“1 year” to avoid any form
 of data spillage).
 
 ``` r
@@ -84,15 +161,7 @@ objective function. Other functions still need to be implemented.
                                    config2=list(nrounds=10, max_depth=3, eta=0.1, objective="reg:squarederror")))
 ```
 
-Finally, we call the backtesting function. The function returns a data
-frame with the backtesting results. The data frame contains the
-following columns: date, return_label, features, rolling, window_size,
-step_size, offset, in_sample, ml_config, model, predicted returns,
-actual realized returns, and errors for all predictions. The model
-column contains the name of the model that was used for the prediction.
-The prediction column contains the predicted returns. The actual column
-contains the actual returns. The error column contains the difference
-between the predicted and the actual returns.
+Finally, we call the backtesting function.
 
 ``` r
  rp <- backtesting_returns(data=data_ml, return_prediction_object=NULL,
@@ -116,7 +185,14 @@ between the predicted and the actual returns.
 #> check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore".
 ```
 
-Next we take this predictions and analyse thbeir statistical properties
+The function returns an S3 object of class `returnPrediction` that
+contains all the information associated with the backtesting results. It
+contains information on the used models (`rp$models`), the predictions
+(`rp$predictions`), as well as the actual returns (`rp$actual_returns`)
+and the errors (`rp$errors`). We provide a summary routine via
+`summary()` that calculates the Mean-Squared-Error (MSE), the
+Root-Mean-Squared-Error (RMSE), the Mean-Absolute-Error (MAE), and the
+Hit-Ratio (the percentage of correct predictions).
 
 ``` r
 rp$predictions |> head()
@@ -138,12 +214,18 @@ print(rp_stats)
 ```
 
 Next, we map those predictions into various portfolios (quantiles) and
-analyse their performance. We specify various weight restrictions, such
-as the minimum and maximum weight, the minimum and maximum cutoff
-quantile, and the b parameter that adjusts the amount of investment per
-leg (b=1 means, we go 100% long and short). We also specify the
-predictions that should be used for the portfolio formation (e.g.,
-ols_1, xgb_1, xgb_2).
+analyse their performance. Therefore, we specify a mapping_function (can
+be individually provided), and a portfolio configuration. The mapping
+function is a function that maps the predictions into portfolio weights.
+We provide two functions, `quantile_weights` and `ensemble_weights`. The
+portfolio configuration specifies the quantiles that should be used for
+the portfolio formation, as well as various constraints and parameters.
+Additionally we can specify various portfolio restrictions, such as the
+minimum and maximum weight, the minimum and maximum cutoff quantile, and
+the b parameter that adjusts the amount of investment per leg (b=1
+means, we go 100% long and short). We also specify the predictions that
+should be used for the portfolio formation (e.g., ‘ols_1’, ‘xgb_1’,
+‘xgb_2’).
 
 ``` r
 pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
@@ -163,7 +245,19 @@ pf <- backtesting_portfolios(return_prediction_object = rp, pf_config = pf_confi
 #> Specifically processing config 2 of 2
 ```
 
-Let us check the content of pf, and calculate some summary statistics
+This creates another S3 object of class `portfolio` that contains all
+the information associated with the portfolio formation. It contains
+information on the portfolio models used (`pf$weight_models`), the
+actual returns of the assets (`pf$actual_returns`), the portfolio
+returns (`pf$portfolio_returns`). We provide a summary routine via
+`summary()` that calculates the Mean, Standard Deviation, Sharpe Ratio,
+Maximum Drawdown, and the Calmar Ratio.
+
+), the portfolio weights (`pf$weights`), the actual returns of the
+assets (`pf$actual_returns`), the portfolio returns
+(`pf$portfolio_returns`). We provide a summary routine via `summary()`
+that calculates the Mean, Standard Deviation, Sharpe Ratio, Value at
+Risk, as well as the turnover.
 
 ``` r
 pf$weights |> head()
@@ -210,26 +304,19 @@ Alternatively, we can also calculate statistics from the
 
 ``` r
 library(tidyquant)
-#> Lade nötiges Paket: PerformanceAnalytics
-#> Lade nötiges Paket: xts
-#> Lade nötiges Paket: zoo
-#> 
-#> Attache Paket: 'zoo'
-#> Die folgenden Objekte sind maskiert von 'package:base':
-#> 
-#>     as.Date, as.Date.numeric
-#> 
-#> Attache Paket: 'xts'
-#> Die folgenden Objekte sind maskiert von 'package:dplyr':
-#> 
-#>     first, last
-#> 
-#> Attache Paket: 'PerformanceAnalytics'
-#> Das folgende Objekt ist maskiert 'package:graphics':
-#> 
-#>     legend
-#> Lade nötiges Paket: quantmod
-#> Lade nötiges Paket: TTR
+#> ── Attaching core tidyquant packages ──────────────────────── tidyquant 1.0.9 ──
+#> ✔ PerformanceAnalytics 2.0.4      ✔ TTR                  0.24.4
+#> ✔ quantmod             0.4.26     ✔ xts                  0.14.0
+#> ── Conflicts ────────────────────────────────────────── tidyquant_conflicts() ──
+#> ✖ zoo::as.Date()                 masks base::as.Date()
+#> ✖ zoo::as.Date.numeric()         masks base::as.Date.numeric()
+#> ✖ dplyr::filter()                masks stats::filter()
+#> ✖ xts::first()                   masks dplyr::first()
+#> ✖ dplyr::lag()                   masks stats::lag()
+#> ✖ xts::last()                    masks dplyr::last()
+#> ✖ PerformanceAnalytics::legend() masks graphics::legend()
+#> ✖ quantmod::summary()            masks base::summary()
+#> ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
 # tidyquant::tq_performance_fun_options()
 summary(pf)
 #> # A tibble: 6 × 6
@@ -372,7 +459,8 @@ summary(pf, type = "cov")
 #> xgb_2_quantile_weights_2              0.008292291              0.008180366
 ```
 
-Now we plot the corresponding cumulative returns of the portfolios
+Additionally, we provide a standard plotting routine for the portfolio
+object via `plot`.
 
 ``` r
 plot(pf)
@@ -427,7 +515,7 @@ plot(pf, type = "chart.Boxplot")
 Lets start with a simple random forest implementation. We need to
 specify the function that should be used for the prediction, the
 configuration of the function, and the name of the function. The logic
-is easy: create a function “rf_pred” having arguments: ‘train_data’,
+is easy: create a function `rf_pred` having arguments: ‘train_data’,
 ‘test_data’, as well as a ‘config’ that is taken by the prediction
 function.
 
@@ -436,11 +524,11 @@ rf_config <- list(rf_pred = list(pred_func="rf_pred",
                                  config1=list(num.trees=100, max.depth=3, mtry=3)))
 ```
 
-Next we implement the prediction function. The function takes the
-training data, the test data, and the configuration as arguments. The
-function returns the predicted returns. The function uses the
-`randomForest` package to fit a random forest model to the training data
-and to predict the returns for the test data.
+Next we implement this prediction function. The function takes the
+training data, the test data, and the configuration as arguments and
+returns the predicted returns. It uses the `randomForest` package to fit
+a random forest model to the training data and to predict the returns
+for the test data.
 
 ``` r
 rf_pred <- function(train_data, test_data, config) {
@@ -459,16 +547,9 @@ rf_pred <- function(train_data, test_data, config) {
 }
 ```
 
-Finally, we call the backtesting function with the new configuration.
-The function returns a data frame with the backtesting results. The data
-frame contains the following columns: date, return_label, features,
-rolling, window_size, step_size, offset, in_sample, ml_config, model,
-predicted returns, actual realized returns, and errors for all
-predictions. The model column contains the name of the model that was
-used for the prediction. The prediction column contains the predicted
-returns. The actual column contains the actual returns. The error column
-contains the difference between the predicted and the actual returns. By
-providing the ‘rp’ object from before, we add an additional prediction.
+Finally, we call the `backtesting_returns` function with the new
+configuration. The function returns a data frame with the backtesting
+results and appends them to the existing return prediction object ‘rf’.
 
 ``` r
 rp_rf <- backtesting_returns(data=data_ml, return_prediction_object=rp,
@@ -483,29 +564,31 @@ rp_rf <- backtesting_returns(data=data_ml, return_prediction_object=rp,
 #> check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore".
 ```
 
-Next we chack the prediction summary.
+We can check, whether the random forest produces better predictions than
+the other models:
 
 ``` r
 rp_rf$predictions |> head()
 #> # A tibble: 6 × 6
 #>   stock_id date        ols_1  xgb_1 xgb_2   rf_1
 #>      <int> <date>      <dbl>  <dbl> <dbl>  <dbl>
-#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0284
-#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0283
-#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0306
-#> 4       17 2015-03-31 0.0336 0.110  0.223 0.0883
+#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0283
+#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0306
+#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0291
+#> 4       17 2015-03-31 0.0336 0.110  0.223 0.0860
 #> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0639
-#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0549
+#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0531
 rp_rf_stats <- summary(rp_rf)
 print(rp_rf_stats)
 #>       MSE        RMSE      MAE        Hit_Ratio
 #> ols_1 0.03158888 0.1777326 0.08071823 0.5352989
 #> xgb_1 0.03142746 0.1772779 0.08193929 0.5529501
 #> xgb_2 0.06060931 0.2461896 0.1848615  0.5525796
-#> rf_1  0.03127481 0.1768469 0.08038432 0.5524914
+#> rf_1  0.03126705 0.1768249 0.08038662 0.5525302
 ```
 
-Lets create portfolios again.
+Let us recreate the portfolio formation process with the new prediction
+object.
 
 ``` r
 pf_config <- list(predictions = c("xgb_2","rf_1"),
@@ -534,8 +617,25 @@ print(pf_rf_stats)
 #> # A tibble: 4 × 6
 #>   portfolio                  mean     sd    SR   VaR_5 turnover
 #>   <chr>                     <dbl>  <dbl> <dbl>   <dbl>    <dbl>
-#> 1 rf_1_quantile_weights_1  0.0283 0.0742 0.381 -0.0891     84.6
-#> 2 rf_1_quantile_weights_2  0.0379 0.0912 0.416 -0.102     111. 
+#> 1 rf_1_quantile_weights_1  0.0281 0.0747 0.377 -0.0914     85.0
+#> 2 rf_1_quantile_weights_2  0.0380 0.0911 0.417 -0.101     110. 
 #> 3 xgb_2_quantile_weights_1 0.0282 0.0733 0.385 -0.0855     90.1
 #> 4 xgb_2_quantile_weights_2 0.0383 0.0904 0.424 -0.0916    118.
 ```
+
+### Author/License
+
+- **Investigator Team and Ass.-Prof. Dr. Sebastian Stöckl** - Package
+  Creator, Modifier & Maintainer - [sstoeckl on
+  github](https://github.com/sstoeckl)
+
+This project is licensed under the MIT License - see the \<license.md\>
+file for details\</license.md\>
+
+### Acknowledgments
+
+This project is the result of a large effort of my students that
+participated in the “Machine Learning in Finance II” course at the
+University of Liechtenstein in Summer 2024. In particluar, this are Eric
+Schumann, Andreas Pischetsrieder, Christian Mahrun, Noah Veltri, Nicolas
+Baumann, Aziza Ouali, Nazim Yigitoglu, and Mikhail Zhabin.
