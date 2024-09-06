@@ -174,4 +174,64 @@ find_largest_number <- function(strings, model_name) {
   max_number <- max(numbers, na.rm = TRUE)
   return(max_number)
 }
+library(dplyr)
+library(caret)
 
+#' Encode Categorical Variables
+#'
+#' This function checks a data frame for categorical variables and applies one-hot encoding
+#' if any are found. It provides a message about the changes.
+#'
+#' @param data A data frame that might contain categorical variables.
+#'
+#' @return A list containing the modified data frame and a vector of encoded variables.
+#'
+#' @importFrom dplyr mutate_all select_if
+#' @importFrom caret dummyVars
+#'
+#' @examples
+#' data(iris)
+#' result <- encode_categorical(iris)
+#' print(result$data)  # Modified data
+#' print(result$encoded_vars)  # Names of encoded variables
+encode_categorical <- function(data) {
+  # Identify categorical variables
+  categorical_vars <- sapply(data, is.factor) | sapply(data, is.character)
+
+  if (any(categorical_vars)) {
+    cat_var_names <- names(categorical_vars[categorical_vars])
+    message("Encoding categorical variables: ", paste(cat_var_names, collapse = ", "))
+
+    # Apply one-hot encoding
+    dummies <- caret::dummyVars(~ ., data = data, fullRank = FALSE)
+    data_transformed <- predict(dummies, newdata = data)
+
+    # Return the modified data frame and the names of encoded variables
+    return(list(data = data_transformed, encoded_vars = cat_var_names))
+  } else {
+    return(list(data = data, encoded_vars = NULL))
+  }
+}
+#' Check for Missing Values
+#'
+#' This function examines a dataframe for any missing values and issues a warning if missing values are found,
+#' reporting the columns with missing values and the count of missing entries.
+#'
+#' @param data A dataframe to check for missing values.
+#'
+#' @return A dataframe unchanged, but with a warning message if missing values are found.
+#'
+check_missing_values <- function(data) {
+  # Check for missing values in each column
+  missing_summary <- summarise_all(data, ~ sum(is.na(.)))
+
+  # Find columns with missing values
+  missing_cols <- names(missing_summary)[which(missing_summary > 0)]
+
+  if (length(missing_cols) > 0) {
+    # Create a warning message with specifics about missing data
+    warning_message <- paste("Missing values found in columns:", paste(missing_cols, collapse=", "),
+                             ". Total missing per column: ", paste(missing_summary[missing_cols], collapse=", "), ".")
+    warning(warning_message)
+  }
+}
