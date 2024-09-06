@@ -23,7 +23,7 @@ data <- tibble::tibble(
   date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)),
   return_label = runif(100)
 )
-# Create the returnPrediction object
+# Create the portfolioReturns object
 pf <- create_portfolios(data, "return_label")
 # Check the initial setup
 print(pf)

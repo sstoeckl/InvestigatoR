@@ -4,29 +4,31 @@
 \name{InvestigatoR-package}
 \alias{InvestigatoR}
 \alias{InvestigatoR-package}
-\title{InvestigatoR: What the Package Does (Title Case)}
+\title{InvestigatoR: Machine Learning for Factor Investing with R}
 \description{
-More about what it does (maybe more than one line) Use four spaces when indenting paragraphs within the Description.
+The package provides a front-end to backtesting investment portfolios using various machine learning and weighting algorithms. It is based on various features from the book Machine Learning for Factor Investing at \url{https://www.mlfactor.com/} by Guillaume Coqueret.
 }
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/ericschumann12/InvestigatoR}
-  \item Report bugs at \url{https://github.com/ericschumann12/InvestigatoR/issues}
+  \item \url{https://github.com/sstoeckl/InvestigatoR}
+  \item Report bugs at \url{https://github.com/sstoeckl/InvestigatoR/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Eric Schumann \email{eric.schumann@uni.li}
+\strong{Maintainer}: Sebastian Stoeckl \email{sebastian.stoeckl@uni.li} (\href{https://orcid.org/0000-0002-4196-6093}{ORCID}) (Package maintainer and co-author.)
 
 Authors:
 \itemize{
-  \item Christian Mahrun \email{christian.mahrun@uni.li}
-}
-
-Other contributors:
-\itemize{
-  \item  [contributor]
+  \item Eric Schumann
+  \item Andreas Pischetsrieder
+  \item Christian Mahrun
+  \item Noah Veltri
+  \item Nicolas Baumann
+  \item Aziza Ouali
+  \item Nazim Yigitoglu
+  \item Mikhail Zhabin
 }
 
 }
