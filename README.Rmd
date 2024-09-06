@@ -14,23 +14,72 @@ knitr::opts_chunk$set(
 options(xts.warn_dplyr_breaks_lag = FALSE)
 ```
 
-# InvestigatoR
+# InvestigatoR <a href='https://github.com/sstoeckl/InvestigatoR'><img src='man/figures/Investigator.png' align="right" height="139" style="float:right; height:200px;"/></a>
 
 <!-- badges: start -->
+  [![Project Status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+  <!-- [![CRAN_latest_release_date](https://www.r-pkg.org/badges/last-release/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+  <!-- [![CRAN status](https://www.r-pkg.org/badges/version/InvestigatoR)](https://CRAN.R-project.org/package=InvestigatoR) -->
+  <!-- [![CRAN downloads](http://cranlogs.r-pkg.org/badges/grand-total/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+  <!-- [![CRAN downloads last month](http://cranlogs.r-pkg.org/badges/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+  <!-- [![CRAN downloads last week](http://cranlogs.r-pkg.org/badges/last-week/InvestigatoR)](https://cran.r-project.org/package=InvestigatoR) -->
+  <!-- [![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable) -->
+  [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+  [![Website - pkgdown](https://img.shields.io/website-up-down-green-red/https/sstoeckl.github.io/InvestigatoR.svg)](https://sstoeckl.github.io/InvestigatoR/)
 <!-- badges: end -->
 
-The goal of InvestigatoR is to ...
+# "InvestigatoR" that's what she said!
 
-## Installation
+The **goal of InvestigatoR** is to provide a comprehensive toolkit for quantitative finance professionals and researchers to conduct advanced backtesting and portfolio analysis using machine learning models. 
+
+It offers:
+
+- a streamlined *workflow* for loading data
+- specifying *features*
+- configuring *machine learning models*
+- and analyzing the *performance of predictions and portfolio strategies*. 
+
+This facilitates the evaluation of investment strategies, helping users to optimize returns and manage risks more effectively in their financial models.
+
+More in detail, the package allows the user to create:
+
+- `returnPrediction`: An S3 object that contains the results of the backtesting strategy for predicting stock returns. One can subsequently try different prediction algorithms and all save them in the same object. The object then contains, (i) information on the algorithm and parameters used, (ii) the predictions, (iii) the real returns as well as (iv) the respective errors. Using `summary()` on this object will produce common error statistics (MSE, RMSE, MAE, ...).
+- `backtesting_returns()`: This function is one of the major workhorses of the package. It predicts a label (mostly the returns, but can also be other labels, such as the volatility) for a set of given assets and dates based on available features. The function allows for different machine learning algorithms, some are pre-implemented, such as linear regression, gradient boosting, and random forests, others can easily be added (see `vignette("custom_predictions")`). It contains a large variety of configuration options, such as rolling or expanding windows, window sizes, step sizes, and offsets. The function adds predictions and all necessary information to the `returnPrediction` S3 object. Currently implemented prediction functions:
+
+    - `ols_pred`: predicts returns using simple linear regression
+    - `xgb_pred`: predicts returns using gradient boosted trees
+    - `rf_pred`: predicts returns using random forests
+
+In the future we plan a major upgrade to the function to be able to handle caret models as well as other machine learning models.
+- `portfolioReturns`: Another S3 object that contains the results of the backtesting strategy for a portfolio. The object contains (i) information on the weight creation strategy and function used, including possible constraints and parameters, (ii) the weights created per asset and date, (iii) the actual asset returns and (iv) the (automatically calculated) portfolio returns. Using `summary()` on this object will produce common performance statistics (mean, stanjdard deviation, Share Ratio, VaR, turnover), but can also handle almost all `PerformanceAnalytics` functions and tables. An additional `plot` routine will produce a cumulative return plot of the portfolio, but can also handle various predefined plots from the `PerformanceAnalytics` package.
+- `backtesting_portfolio()`: This function is the second major work horse of the package. It uses the predictions contained in a `returnPrediction` object to create portfolio weights implementing various constraints
+
+
+
+lculates the returns of a portfolio strategy based on the predictions. The function allows for different portfolio strategies, such as long-short, long-only, short-only, and equal-weighted. The function also allows for different holding periods, such as daily, weekly, monthly, and yearly. The function returns a data frame with the returns of the portfolio strategy.
+
+
+
+
+
+
+# Installation
 
 You can install the development version of InvestigatoR from [GitHub](https://github.com/) with:
 
-``` r
+```{r install_package}
 # install.packages("devtools")
-devtools::install_github("ericschumann12/InvestigatoR")
+devtools::install_github("sstoeckl/InvestigatoR")
 ```
 
-## Basic Workflow
+# Package History
+
+
+
+
+
+
+# Package Usage
 
 This is a basic example which shows you how to solve a common problem:
 
@@ -74,7 +123,7 @@ Finally, we call the backtesting function. The function returns a data frame wit
    return_label, features, rolling=FALSE, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
 ```
 
-Next we take this predictions and analyse thbeir statistical properties
+Next we take this predictions and analyse their statistical properties
 
 ```{r analyse_predictions}
 rp$predictions |> head()
@@ -83,7 +132,6 @@ print(rp_stats)
 ```
 
 Next, we map those predictions into various portfolios (quantiles) and analyse their performance. We specify various weight restrictions, such as the minimum and maximum weight, the minimum and maximum cutoff quantile, and the b parameter that adjusts the amount of investment per leg (b=1 means, we go 100% long and short). We also specify the predictions that should be used for the portfolio formation (e.g., ols_1, xgb_1, xgb_2). 
-
 
 ```{r specify_pf_config}
 pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
