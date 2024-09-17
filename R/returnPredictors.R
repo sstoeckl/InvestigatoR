@@ -1,56 +1,70 @@
-#' ols function for return prediction
+#' OLS Prediction Function
 #'
-#' @param train_data data frame with stock_id, date, return_label and features
-#' @param test_data data frame with stock_id, date and features
-#' @param config empty list, as ols does not need any configuration
-#' @param fast logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R
+#' @param train_data Data frame containing `stock_id`, `date`, `return_label`, and feature columns.
+#' @param test_data Data frame containing `stock_id`, `date`, and feature columns.
+#' @param config List. Configuration parameters for the model (not used in OLS).
+#' @param fast Logical. If `TRUE`, use `fastLm` from `RcppArmadillo`; otherwise, use base `lm`.
 #'
-#' @return tibble with stock_id, date and pred_return matching the test_data
+#' @return Tibble with `stock_id`, `date`, and `pred_return` matching the `test_data`.
 #'
-#' @importFrom RcppArmadillo fastLm
-#' @importFrom dplyr pull
+#' @importFrom dplyr pull select
 #' @importFrom tibble tibble
-#' @importFrom stats predict
+#' @importFrom stats lm predict
+#' @importFrom RcppArmadillo fastLm
 #'
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' data(data_ml)
-#' train_data_ex <- data_ml[1:100,c(1,2,96,5:10)]
-#' test_data_ex <- data_ml[101:150,c(1,2,5:10)]
-#' ols_pred(train_data_ex, test_data_ex, config=list(), fast=TRUE)
-#' ols_pred(train_data_ex, test_data_ex, config=list(), fast=FALSE)
+#' train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+#' test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+#' ols_pred(train_data_ex, test_data_ex, config = list(), fast = TRUE)
 #' }
-ols_pred <- function(train_data, test_data, config=list(), fast=TRUE) {
+ols_pred <- function(train_data, test_data, config = list(), fast = TRUE) {
+
+  # Input Validation
+  required_train_cols <- c("stock_id", "date", "return_label")
+  required_test_cols <- c("stock_id", "date")
+
+  if (!all(required_train_cols %in% colnames(train_data))) {
+    stop("train_data must contain 'stock_id', 'date', and 'return_label' columns.")
+  }
+
+  if (!all(required_test_cols %in% colnames(test_data))) {
+    stop("test_data must contain 'stock_id' and 'date' columns.")
+  }
+
   # Handle missing values
   check_missing_values(train_data)
   check_missing_values(test_data)
 
   # Encode categorical data
   full_data <- bind_rows(train_data, test_data)
-  full_data <- encode_categorical(full_data)
+  encoded_data <- encode_categorical(full_data)
 
   # Split data back
-  train_data <- full_data$data[1:nrow(train_data), ]
-  test_data <- full_data$data[(nrow(train_data) + 1):nrow(full_data$data), -3]
+  train_encoded <- encoded_data$data[1:nrow(train_data), ]
+  test_encoded <- encoded_data$data[(nrow(train_data) + 1):nrow(encoded_data$data), -3]  # Assuming third column is 'return_label'
 
   # Perform OLS prediction
   if (fast) {
     # Fast version with RcppArmadillo
-    mm <- cbind(1, as.matrix(train_data[,4:ncol(train_data)]))
-    y  <- train_data |> dplyr::pull(3)
+    mm <- cbind(1, as.matrix(train_encoded[, 4:ncol(train_encoded)]))
+    y  <- train_encoded %>% pull(return_label)
     plm <- RcppArmadillo::fastLm(mm, y)
-    predictions <- predict(plm, cbind(1, as.matrix(test_data[,3:ncol(test_data)])))
+
+    test_mm <- cbind(1, as.matrix(test_encoded[, 3:ncol(test_encoded)]))
+    predictions <- predict(plm, test_mm)
   } else {
     # Standard version with lm
-    formula_lm <- as.formula(paste0(colnames(train_data)[3], " ~ ."))
-    flm <- lm(formula_lm, data=train_data[,3:ncol(train_data)])
-    predictions <- as.vector(predict(flm, test_data[,3:ncol(test_data)]))
+    formula_lm <- as.formula(paste0("return_label ~ ", paste(colnames(train_encoded)[4:ncol(train_encoded)], collapse = " + ")))
+    flm <- lm(formula_lm, data = train_encoded)
+    predictions <- predict(flm, test_encoded[, 3:ncol(test_encoded)])
   }
 
   # Return predictions
-  predictions <- tibble::tibble(stock_id=test_data$stock_id, date=test_data$date, pred_return=predictions)
+  predictions <- tibble::tibble(stock_id = test_encoded$stock_id, date = test_encoded$date, pred_return = predictions)
   return(predictions)
 }
 
@@ -183,37 +197,51 @@ xgb_pred <- function(train_data, test_data, config = list()) {
   return(predictions)
 }
 
-#' Random Forest function for return prediction
+#' Random Forest Prediction Function
 #'
-#' This function trains a Random Forest model to predict returns based on the provided training data
-#' and predicts returns for the test data.
+#' @param train_data Data frame containing `stock_id`, `date`, `return_label`, and feature columns.
+#' @param test_data Data frame containing `stock_id`, `date`, and feature columns.
+#' @param config List. Configuration parameters for the random forest model.
+#'  - `num.trees`: Number of trees in the forest (default: 100).
+#'  - `mtry`: Number of variables randomly sampled as candidates at each split (default: 5).
 #'
-#' @param train_data A data frame with stock_id, date, return_label, and features.
-#' @param test_data A data frame with stock_id, date, and features.
-#' @param config A list of random forest configuration parameters (e.g., num.trees, mtry).
+#' @return Tibble with `stock_id`, `date`, and `pred_return` matching the `test_data`.
 #'
-#' @return A tibble with stock_id, date, and predicted returns matching the test data.
-#' @import ranger
+#' @importFrom dplyr pull select
 #' @importFrom tibble tibble
-#' @importFrom dplyr bind_rows
+#' @importFrom ranger ranger
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' data(data_ml)
-#' train_data_ex <- data_ml[1:100, c(1,2,96,5:10)]
-#' test_data_ex <- data_ml[101:150, c(1,2,5:10)]
+#' train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+#' test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
 #' rf_pred(train_data_ex, test_data_ex, config = list(num.trees = 200, mtry = 4))
 #' }
 rf_pred <- function(train_data, test_data, config = list()) {
-  # Default parameters for ranger
+
+  # Define default parameters
   default_params <- list(
     num.trees = 100,  # Number of random trees
     mtry = 5          # Number of variables randomly sampled as candidates at each split
   )
 
-  # Ensure config using helper function
-  config <- ensure_config(config, default_params)
+  # Merge user config with default params
+  config <- purrr::list_modify(default_params, !!!config)
+
+  # Input Validation
+  required_train_cols <- c("stock_id", "date", "return_label")
+  required_test_cols <- c("stock_id", "date")
+
+  if (!all(required_train_cols %in% colnames(train_data))) {
+    stop("train_data must contain 'stock_id', 'date', and 'return_label' columns.")
+  }
+
+  if (!all(required_test_cols %in% colnames(test_data))) {
+    stop("test_data must contain 'stock_id' and 'date' columns.")
+  }
 
   # Handle missing values
   check_missing_values(train_data)
@@ -221,15 +249,15 @@ rf_pred <- function(train_data, test_data, config = list()) {
 
   # Encode categorical data
   full_data <- bind_rows(train_data, test_data)
-  full_data <- encode_categorical(full_data)
+  encoded_data <- encode_categorical(full_data)
 
   # Split data back
-  train_data <- full_data$data[1:nrow(train_data), ]
-  test_data <- full_data$data[(nrow(train_data) + 1):nrow(full_data$data), -3]
+  train_encoded <- encoded_data$data[1:nrow(train_data), ]
+  test_encoded <- encoded_data$data[(nrow(train_data) + 1):nrow(encoded_data$data), -3]  # Assuming third column is 'return_label'
 
   # Prepare training features and labels
-  train_features <- as.matrix(train_data[, 4:ncol(train_data)])
-  train_label <- as.matrix(train_data[, 3])  # Assuming the 3rd column is the response variable
+  train_features <- as.matrix(train_encoded[, 4:ncol(train_encoded)])
+  train_label <- train_encoded %>% pull(return_label)
 
   # Train the random forest model using ranger
   fit <- ranger::ranger(
@@ -240,12 +268,11 @@ rf_pred <- function(train_data, test_data, config = list()) {
   )
 
   # Prepare test data and predict
-  test_features <- as.matrix(test_data[, 3:ncol(test_data)])
+  test_features <- as.matrix(test_encoded[, 3:ncol(test_encoded)])
   predictions <- predict(fit, data = test_features)$predictions
 
-  # Match predictions back to stock_id and date
-  predictions <- tibble::tibble(stock_id = test_data$stock_id, date = test_data$date, pred_return = predictions)
-
+  # Return predictions
+  predictions <- tibble::tibble(stock_id = test_encoded$stock_id, date = test_encoded$date, pred_return = predictions)
   return(predictions)
 }
 

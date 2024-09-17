@@ -2,30 +2,25 @@
 % Please edit documentation in R/weight_functions.R
 \name{ensemble_weights}
 \alias{ensemble_weights}
-\title{Create weights based on various predictions, potentially using their errors with given constraints}
+\title{Create Weights Based on Ensemble Methods}
 \usage{
 ensemble_weights(return_predictions, errors, method = "simple_average")
 }
 \arguments{
-\item{return_predictions}{tibble of stock_id, date, and various predictions}
+\item{return_predictions}{Tibble containing \code{stock_id}, \code{date}, and various prediction columns.}
 
-\item{errors}{tibble of stock_id, date, and various prediction errors}
+\item{errors}{Tibble containing \code{stock_id}, \code{date}, and various error columns.}
 
-\item{method}{method to use for ensemble weights. Possible values are:
+\item{method}{Character. Method to use for ensemble weights. Possible values are:
 \itemize{
-\item simple_average: simple average of predictions
-\item weighted_average: weighted average based on the inverse of average errors
-\item error_covariance: using the covariance of errors to calculate weights
+\item "simple_average": Simple average of predictions.
+\item "weighted_average": Weighted average based on the inverse of average errors.
+\item "error_covariance": Using the covariance of errors to calculate weights.
 }}
 }
 \value{
-tibble with stock_id, date, and weight
+Numeric vector of ensemble predictions.
 }
 \description{
-Create weights based on various predictions, potentially using their errors with given constraints
-}
-\examples{
-\dontrun{
-}
-
+Create Weights Based on Ensemble Methods
 }

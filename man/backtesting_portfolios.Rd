@@ -2,37 +2,61 @@
 % Please edit documentation in R/backtesting_portfolios.R
 \name{backtesting_portfolios}
 \alias{backtesting_portfolios}
-\title{This function is for backtesting portfolios given return predictions}
+\title{Backtesting Portfolios Function}
 \usage{
 backtesting_portfolios(
   return_prediction_object,
   portfolio_object = NULL,
   pf_config,
-  append = FALSE
+  append = FALSE,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{return_prediction_object}{a returnPrediction S3 object}
+\item{return_prediction_object}{An object of class \code{returnPrediction} containing return predictions.}
 
-\item{portfolio_object}{a portfolio S3 object}
+\item{portfolio_object}{An object of class \code{portfolio} to store portfolio returns. Default is \code{NULL}, which creates a new object.}
 
-\item{pf_config}{a list of configurations for the portfolio}
+\item{pf_config}{A list of configurations for portfolio formation. It should specify prediction columns and weight creation strategies.}
 
-\item{append}{boolean, whether to append the portfolio to the portfolio object}
+\item{append}{If \code{TRUE}, the function will append the portfolio to the portfolio object. If \code{FALSE}, the object will be overwritten.}
+
+\item{verbose}{If \code{TRUE}, detailed messages will be printed. Default is \code{TRUE}.}
 }
 \value{
-a portfolio object suitable for furtehr processing with summary or plot
+An S3 object of class \code{portfolio} containing portfolio returns and associated information.
 }
 \description{
-This function is for backtesting portfolios given return predictions
+This function backtests portfolios based on return predictions, implementing various weight creation strategies and constraints.
 }
 \examples{
 \dontrun{
-pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
-                 quantile_weight = list(pred_func="quantile_weights",
-                 config1=list(quantiles = list(long = 0.20, short = 0.20),allow_short_sale = TRUE,
-                 min_weight = -1,  max_weight = 1, b = 1),
-                 config2=list(quantiles = list(long = 0.10, short = 0.10),allow_short_sale = TRUE,
-                 min_weight = -1,  max_weight = 1, b = 1)))
+pf_config <- list(
+  predictions = c("ols_1", "xgb_1", "xgb_2"),
+  quantile_weight = list(
+    pred_func = "quantile_weights",
+    config1 = list(
+      quantiles = list(long = 0.20, short = 0.20),
+      allow_short_sale = FALSE,
+      min_weight = 0,
+      max_weight = 1,
+      b = 1
+    ),
+    config2 = list(
+      quantiles = list(long = 0.10, short = 0.10),
+      allow_short_sale = FALSE,
+      min_weight = 0,
+      max_weight = 1,
+      b = 1
+    )
+  )
+)
+pf <- backtesting_portfolios(
+  return_prediction_object = rp,
+  portfolio_object = NULL,
+  pf_config = pf_config,
+  append = FALSE,
+  verbose = TRUE
+)
 }
 }

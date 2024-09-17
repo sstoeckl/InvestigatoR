@@ -2,29 +2,32 @@
 % Please edit documentation in R/returnPredictors.R
 \name{rf_pred}
 \alias{rf_pred}
-\title{Random Forest function for return prediction}
+\title{Random Forest Prediction Function}
 \usage{
 rf_pred(train_data, test_data, config = list())
 }
 \arguments{
-\item{train_data}{A data frame with stock_id, date, return_label, and features.}
+\item{train_data}{Data frame containing \code{stock_id}, \code{date}, \code{return_label}, and feature columns.}
 
-\item{test_data}{A data frame with stock_id, date, and features.}
+\item{test_data}{Data frame containing \code{stock_id}, \code{date}, and feature columns.}
 
-\item{config}{A list of random forest configuration parameters (e.g., num.trees, mtry).}
+\item{config}{List. Configuration parameters for the random forest model.
+\itemize{
+\item \code{num.trees}: Number of trees in the forest (default: 100).
+\item \code{mtry}: Number of variables randomly sampled as candidates at each split (default: 5).
+}}
 }
 \value{
-A tibble with stock_id, date, and predicted returns matching the test data.
+Tibble with \code{stock_id}, \code{date}, and \code{pred_return} matching the \code{test_data}.
 }
 \description{
-This function trains a Random Forest model to predict returns based on the provided training data
-and predicts returns for the test data.
+Random Forest Prediction Function
 }
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100, c(1,2,96,5:10)]
-test_data_ex <- data_ml[101:150, c(1,2,5:10)]
+train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
 rf_pred(train_data_ex, test_data_ex, config = list(num.trees = 200, mtry = 4))
 }
 }

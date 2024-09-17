@@ -2,7 +2,7 @@
 % Please edit documentation in R/backtesting_returns.R
 \name{backtesting_returns}
 \alias{backtesting_returns}
-\title{This function is used to use ML to predict the returns that will later be used for a trading strategy}
+\title{Backtesting Returns Function}
 \usage{
 backtesting_returns(
   data,
@@ -11,64 +11,87 @@ backtesting_returns(
   features,
   rolling = TRUE,
   window_size,
-  step_size = 1,
-  offset = 0,
+  step_size = "1 month",
+  offset = "0 months",
   in_sample = TRUE,
   ml_config,
   append = FALSE,
-  num_cores = NULL
+  num_cores = NULL,
+  verbose = TRUE
 )
 }
 \arguments{
-\item{data}{ML dataset (tibble/data.frame) in long format that should contain the features and the return_label as well as the stock_ids (first column) and
-dates (second column). FOr most ML algorithms to work this data set should not contain missing values. Sometimes it needs
-to be balanced in terms of number of stocks available at each point in time.}
+\item{data}{ML dataset (tibble/data.frame) in long format that should contain the features and the \code{return_label} as well as the \code{stock_ids} (first column) and
+dates (second column). For most ML algorithms to work, this dataset should not contain missing values. Sometimes it needs
+to be balanced in terms of the number of stocks available at each point in time.}
 
-\item{return_prediction_object}{an object of class returnPrediction that should be used to store the predictions. Defaul(NULL) creates a new one.
-In case an existing object is passed, given append=TRUE, new predictions are added. If append=FALSE, the object is overwritten.}
+\item{return_prediction_object}{An object of class \code{returnPrediction} that should be used to store the predictions. Default (\code{NULL}) creates a new one.
+In case an existing object is passed, given \code{append = TRUE}, new predictions are added. If \code{append = FALSE}, the object is overwritten.}
 
-\item{return_label}{the prediction label that should be used for the ML model. It should already be appropriately shifted (and date t the label should be from date t+1).}
+\item{return_label}{The prediction label that should be used for the ML model. It should already be appropriately shifted (and date the label should be from date \code{t+1}).}
 
-\item{features}{a vector of features that should be used for the ML model.}
+\item{features}{A vector of features that should be used for the ML model.}
 
-\item{rolling}{if TRUE, the function will use a rolling window approach to predict the returns. If FALSE, the function will use an expanding window approach.}
+\item{rolling}{If \code{TRUE}, the function will use a rolling window approach to predict the returns. If \code{FALSE}, the function will use an expanding window approach.}
 
-\item{window_size}{(either in number of time steps or in years or months as "1 year" or "1 month"!) the size of the window that should be used for the
-rolling window approach. if rolling=FALSE this is the starting window for the expoaning window approach}
+\item{window_size}{(Either in number of time steps or in years or months as \code{"1 year"} or \code{"1 month"}) The size of the window that should be used for the
+rolling window approach. If \code{rolling = FALSE}, this is the starting window for the expanding window approach.}
 
-\item{step_size}{the amount of days the prediction window should be moved forward. Default is 1. If (e.g.) set to three, returns will be predicted for t, t+1 and t+2
-(corresponding to t+1 and t+2 and t+3) in the original datset. Only then will the ML model be retrained.}
+\item{step_size}{The amount of time the prediction window should be moved forward. Default is \code{"1 month"}. If set to \code{"3 months"}, returns will be predicted for \code{t}, \code{t+1}, and \code{t+2}
+(corresponding to \code{t+1}, \code{t+2}, and \code{t+3}) in the original dataset. Only then will the ML model be retrained.}
 
-\item{offset}{(either in number of time steps or in years or months as "1 year" or "1 month"!) the size of data that should be left unused between training data
-and prediction (to avoid look-ahead bias). Default is 0.}
+\item{offset}{(Either in number of time steps or in years or months as \code{"1 year"} or \code{"1 month"}) The size of data that should be left unused between training data
+and prediction (to avoid look-ahead bias). Default is \code{"0 months"}.}
 
-\item{in_sample}{if TRUE, the function will also provide (in-sample) predictions for the training period (+ offfest)}
+\item{in_sample}{If \code{TRUE}, the function will also provide (in-sample) predictions for the training period (plus offset).}
 
-\item{ml_config}{a list that contains the configuration for the ML model. It should contain the following elements:}
+\item{ml_config}{A list that contains the configuration for the ML models. It should contain the following elements:}
 
-\item{append}{if TRUE, the function will append the predicted returns to the original dataset. If FALSE, the function will return a new dataset that contains the
+\item{append}{If \code{TRUE}, the function will append the predicted returns to the original dataset. If \code{FALSE}, the function will return a new dataset that contains the
 predicted returns.}
 
-\item{verbose}{num_cores the number of cores that should be used for parallel processing. If set to NULL the ML iterations will be done sequentially.}
+\item{num_cores}{The number of cores that should be used for parallel processing. If set to \code{NULL}, the ML iterations will be done sequentially.}
+
+\item{verbose}{If \code{TRUE}, detailed messages will be printed. Default is \code{TRUE}.}
 }
 \value{
-a tibble with the stock_id, date and the predicted returns
+An S3 object of class \code{returnPrediction} that contains all the information associated with the backtesting results. It includes information on the used models (\code{rp$models}), the predictions (\code{rp$predictions}), the actual returns (\code{rp$actual_returns}), and the errors (\code{rp$errors}).
 }
 \description{
-This function is used to use ML to predict the returns that will later be used for a trading strategy
+This function uses machine learning models to predict returns that will later be used for a trading strategy.
 }
 \examples{
 \dontrun{
 data(data_ml)
-data <- data_ml
 return_label <- "R1M_Usd"
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
-rolling <- TRUE; window_size= "5 years"; step_size = "3 months"; offset = "1 year"; in_sample = TRUE
-ml_config <- list(ols_pred = list(pred_func="ols_pred", config=list()),
-                  xgb_pred = list(pred_func="xgb_pred", config1=list(nrounds=100, max_depth=3, eta=0.3, objective="reg:squarederror"),
-                                                    config2=list(nrounds=100, max_depth=4, eta=0.1, objective="reg:squarederror")))
-rp <- backtesting_returns(data=data, return_prediction_object=NULL,
-  return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
-
+rolling <- FALSE
+window_size <- "5 years"
+step_size <- "1 month"
+offset <- "1 month"
+in_sample <- TRUE
+ml_config <- list(
+  ols_pred = list(pred_func = "ols_pred", config = list()),
+  xgb_pred = list(
+    pred_func = "xgb_pred",
+    config1 = list(nrounds = 10, max_depth = 3, eta = 0.3, objective = "reg:squarederror"),
+    config2 = list(nrounds = 10, max_depth = 3, eta = 0.1, objective = "reg:squarederror")
+  )
+)
+rp <- backtesting_returns(
+  data = data_ml,
+  return_prediction_object = NULL,
+  return_label = return_label,
+  features = features,
+  rolling = rolling,
+  window_size = window_size,
+  step_size = step_size,
+  offset = offset,
+  in_sample = in_sample,
+  ml_config = ml_config,
+  append = FALSE,
+  num_cores = NULL,
+  verbose = TRUE
+)
 }
 }

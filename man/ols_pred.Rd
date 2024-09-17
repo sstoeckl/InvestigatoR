@@ -2,31 +2,30 @@
 % Please edit documentation in R/returnPredictors.R
 \name{ols_pred}
 \alias{ols_pred}
-\title{ols function for return prediction}
+\title{OLS Prediction Function}
 \usage{
 ols_pred(train_data, test_data, config = list(), fast = TRUE)
 }
 \arguments{
-\item{train_data}{data frame with stock_id, date, return_label and features}
+\item{train_data}{Data frame containing \code{stock_id}, \code{date}, \code{return_label}, and feature columns.}
 
-\item{test_data}{data frame with stock_id, date and features}
+\item{test_data}{Data frame containing \code{stock_id}, \code{date}, and feature columns.}
 
-\item{config}{empty list, as ols does not need any configuration}
+\item{config}{List. Configuration parameters for the model (not used in OLS).}
 
-\item{fast}{logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R}
+\item{fast}{Logical. If \code{TRUE}, use \code{fastLm} from \code{RcppArmadillo}; otherwise, use base \code{lm}.}
 }
 \value{
-tibble with stock_id, date and pred_return matching the test_data
+Tibble with \code{stock_id}, \code{date}, and \code{pred_return} matching the \code{test_data}.
 }
 \description{
-ols function for return prediction
+OLS Prediction Function
 }
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100,c(1,2,96,5:10)]
-test_data_ex <- data_ml[101:150,c(1,2,5:10)]
-ols_pred(train_data_ex, test_data_ex, config=list(), fast=TRUE)
-ols_pred(train_data_ex, test_data_ex, config=list(), fast=FALSE)
+train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+ols_pred(train_data_ex, test_data_ex, config = list(), fast = TRUE)
 }
 }

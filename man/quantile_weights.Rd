@@ -2,40 +2,27 @@
 % Please edit documentation in R/weight_functions.R
 \name{quantile_weights}
 \alias{quantile_weights}
-\title{Create weights based on predictions with given constraints}
+\title{Create Weights Based on Quantile Constraints}
 \usage{
 quantile_weights(return_predictions, errors, constraints = NULL)
 }
 \arguments{
-\item{return_predictions}{tibble of stock_id, date, and various predictions}
+\item{return_predictions}{Tibble containing \code{stock_id}, \code{date}, and various prediction columns.}
 
-\item{errors}{tibble of stock_id, date, and various errors}
+\item{errors}{Tibble containing \code{stock_id}, \code{date}, and various error columns (not used in this function).}
 
-\item{constraints}{list of constraints for the weights. possible values are:
+\item{constraints}{List of constraints for weight calculation. If \code{NULL}, default constraints are used.
 \itemize{
-\item quantiles: list with long and short quantiles (default: median portfolios)
-\item allow_short_sale: logical, if TRUE, allow short sales (default: FALSE)
-\item max_weight: numeric, maximum weight for a single stock (default: 0.1)
-\item min_weight: numeric, minimum weight for a single stock (default: -0.1)
-\item b: numeric, in case of allow_short_sale=TRUE this is the max weight sum in both legs,
-in case of allow_short_sale=FALSE this is the max weight sum in long leg
+\item \code{quantiles}: List with \code{long} and \code{short} quantiles (default: \code{list(long = 0.10, short = 0.10)}).
+\item \code{allow_short_sale}: Logical indicating if short sales are allowed (default: \code{TRUE}).
+\item \code{min_weight}: Numeric minimum weight per position (default: \code{-0.1}).
+\item \code{max_weight}: Numeric maximum weight per position (default: \code{0.1}).
+\item \code{b}: Numeric multiplier for sum constraints (default: \code{10}).
 }}
 }
 \value{
-tibble with stock_id, date, and weight
+Tibble with \code{stock_id}, \code{date}, and \code{weight} for each prediction column.
 }
 \description{
-Create weights based on predictions with given constraints
-}
-\examples{
-constraints <- list(
-  quantiles = list(long = 0.10, short = 0.10)
- )
-
- # Example return predictions
- return_predictions <- data.frame(
-   stock_id = sample(1:100, 100, replace = TRUE),
-   date = seq.Date(from = Sys.Date() - 100, by = "day", length.out = 100),
-   pred = runif(100, -1, 1)
-   )
+Create Weights Based on Quantile Constraints
 }

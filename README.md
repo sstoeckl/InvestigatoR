@@ -231,9 +231,9 @@ should be used for the portfolio formation (e.g., ‘ols_1’, ‘xgb_1’,
 pf_config <- list(predictions = c("ols_1","xgb_1","xgb_2"),
                   quantile_weight = list(pred_func="quantile_weights",
                     config1=list(quantiles = list(long = 0.20, short = 0.20),allow_short_sale = FALSE,
-                      min_weight = -1,  max_weight = 1, b = 1),
+                      min_weight = 0,  max_weight = 1, b = 1),
                     config2=list(quantiles = list(long = 0.10, short = 0.10),allow_short_sale = FALSE,
-                      min_weight = -1,  max_weight = 1, b = 1)))
+                      min_weight = 0,  max_weight = 1, b = 1)))
 ```
 
 Finally we run the portfolio formation process.
@@ -526,9 +526,9 @@ rf_config <- list(rf_pred = list(pred_func="rf_pred",
 
 Next we implement this prediction function. The function takes the
 training data, the test data, and the configuration as arguments and
-returns the predicted returns. It uses the `randomForest` package to fit
-a random forest model to the training data and to predict the returns
-for the test data.
+returns the predicted returns. It uses the `ranger` package to fit a
+random forest model to the training data and to predict the returns for
+the test data.
 
 ``` r
 rf_pred <- function(train_data, test_data, config) {
@@ -572,19 +572,19 @@ rp_rf$predictions |> head()
 #> # A tibble: 6 × 6
 #>   stock_id date        ols_1  xgb_1 xgb_2   rf_1
 #>      <int> <date>      <dbl>  <dbl> <dbl>  <dbl>
-#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0283
-#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0306
-#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0291
-#> 4       17 2015-03-31 0.0336 0.110  0.223 0.0860
-#> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0639
-#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0531
+#> 1       13 2006-12-31 0.0305 0.0402 0.191 0.0465
+#> 2       13 2007-01-31 0.0308 0.0397 0.191 0.0568
+#> 3       13 2007-02-28 0.0300 0.0439 0.193 0.0312
+#> 4       17 2015-03-31 0.0336 0.110  0.223 0.145 
+#> 5       17 2015-04-30 0.0343 0.0734 0.222 0.0952
+#> 6       17 2015-05-31 0.0344 0.0987 0.214 0.0229
 rp_rf_stats <- summary(rp_rf)
 print(rp_rf_stats)
 #>       MSE        RMSE      MAE        Hit_Ratio
 #> ols_1 0.03158888 0.1777326 0.08071823 0.5352989
 #> xgb_1 0.03142746 0.1772779 0.08193929 0.5529501
 #> xgb_2 0.06060931 0.2461896 0.1848615  0.5525796
-#> rf_1  0.03126705 0.1768249 0.08038662 0.5525302
+#> rf_1  0.02655366 0.1629529 0.07046548 0.6159044
 ```
 
 Let us recreate the portfolio formation process with the new prediction
@@ -617,8 +617,8 @@ print(pf_rf_stats)
 #> # A tibble: 4 × 6
 #>   portfolio                  mean     sd    SR   VaR_5 turnover
 #>   <chr>                     <dbl>  <dbl> <dbl>   <dbl>    <dbl>
-#> 1 rf_1_quantile_weights_1  0.0281 0.0747 0.377 -0.0914     85.0
-#> 2 rf_1_quantile_weights_2  0.0380 0.0911 0.417 -0.101     110. 
+#> 1 rf_1_quantile_weights_1  0.0658 0.106  0.622 -0.0757    310. 
+#> 2 rf_1_quantile_weights_2  0.0905 0.143  0.633 -0.0840    336. 
 #> 3 xgb_2_quantile_weights_1 0.0282 0.0733 0.385 -0.0855     90.1
 #> 4 xgb_2_quantile_weights_2 0.0383 0.0904 0.424 -0.0916    118.
 ```
