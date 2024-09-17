@@ -4,7 +4,7 @@
 \alias{caret_wrapper}
 \title{Wrapper for Model Training using Caret}
 \usage{
-caret_wrapper(train_data, test_data, config = list())
+caret_wrapper(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{A data frame with stock_id, date, return_label, and features.}
@@ -12,6 +12,8 @@ caret_wrapper(train_data, test_data, config = list())
 \item{test_data}{A data frame with stock_id, date, and features.}
 
 \item{config}{A list of configuration settings, containing the method, tuneGrid, and trControl for caret.}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 A tibble with stock_id, date, and predicted returns for the test data.

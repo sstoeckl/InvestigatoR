@@ -4,7 +4,7 @@
 \alias{rf_pred}
 \title{Random Forest Prediction Function}
 \usage{
-rf_pred(train_data, test_data, config = list())
+rf_pred(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{Data frame containing \code{stock_id}, \code{date}, \code{return_label}, and feature columns.}
@@ -16,6 +16,8 @@ rf_pred(train_data, test_data, config = list())
 \item \code{num.trees}: Number of trees in the forest (default: 100).
 \item \code{mtry}: Number of variables randomly sampled as candidates at each split (default: 5).
 }}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 Tibble with \code{stock_id}, \code{date}, and \code{pred_return} matching the \code{test_data}.

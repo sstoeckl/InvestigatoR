@@ -24,7 +24,7 @@
 ols_pred <- function(train_data, test_data, config = list(), fast = TRUE) {
 
   # Input Validation
-  required_train_cols <- c("stock_id", "date", "return_label")
+  required_train_cols <- c("stock_id", "date")
   required_test_cols <- c("stock_id", "date")
 
   if (!all(required_train_cols %in% colnames(train_data))) {
@@ -76,6 +76,7 @@ ols_pred <- function(train_data, test_data, config = list(), fast = TRUE) {
 #' @param train_data data frame with stock_id, date, return_label, and features
 #' @param test_data data frame with stock_id, date, and features
 #' @param config list with Elastic Net parameters (alpha and lambda)
+#' @param seed integer. Seed for random number generation
 #'
 #' @return tibble with stock_id, date, and pred_return matching the test_data
 #'
@@ -91,7 +92,10 @@ ols_pred <- function(train_data, test_data, config = list(), fast = TRUE) {
 #' test_data_ex <- data_ml[101:150, c(1,2,5:10)]
 #' enet_pred(train_data_ex, test_data_ex)
 #' }
-enet_pred <- function(train_data, test_data, config=list()) {
+enet_pred <- function(train_data, test_data, config=list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
   # Default Elastic Net parameters
   default_params <- list(
     alpha = 0.5,
@@ -135,6 +139,7 @@ enet_pred <- function(train_data, test_data, config=list()) {
 #' @param test_data data frame with stock_id, date and features
 #' @param config empty list, as ols does not need any configuration
 #' @param fast logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R
+#' @param seed integer. Seed for random number generation
 #'
 #' @return tibble with stock_id, date and pred_return matching the test_data
 #'
@@ -151,7 +156,10 @@ enet_pred <- function(train_data, test_data, config=list()) {
 #' test_data_ex <- data_ml[101:150,c(1,2,5:10)]
 #' xgb_pred(train_data_ex, test_data_ex, config=list())
 #' }
-xgb_pred <- function(train_data, test_data, config = list()) {
+xgb_pred <- function(train_data, test_data, config = list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
   # Default parameters for xgboost
   default_params <- list(
     eta = 0.3,
@@ -204,6 +212,7 @@ xgb_pred <- function(train_data, test_data, config = list()) {
 #' @param config List. Configuration parameters for the random forest model.
 #'  - `num.trees`: Number of trees in the forest (default: 100).
 #'  - `mtry`: Number of variables randomly sampled as candidates at each split (default: 5).
+#' @param seed integer. Seed for random number generation
 #'
 #' @return Tibble with `stock_id`, `date`, and `pred_return` matching the `test_data`.
 #'
@@ -220,7 +229,10 @@ xgb_pred <- function(train_data, test_data, config = list()) {
 #' test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
 #' rf_pred(train_data_ex, test_data_ex, config = list(num.trees = 200, mtry = 4))
 #' }
-rf_pred <- function(train_data, test_data, config = list()) {
+rf_pred <- function(train_data, test_data, config = list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
 
   # Define default parameters
   default_params <- list(
@@ -284,6 +296,7 @@ rf_pred <- function(train_data, test_data, config = list()) {
 #' @param train_data A data frame with stock_id, date, return_label, and features.
 #' @param test_data A data frame with stock_id, date, and features.
 #' @param config A list of SVM configuration parameters (e.g., kernel, type, gamma, cost, epsilon).
+#' @param seed integer. Seed for random number generation
 #'
 #' @return A tibble with stock_id, date, and predicted returns matching the test data.
 #' @importFrom e1071 svm
@@ -298,7 +311,10 @@ rf_pred <- function(train_data, test_data, config = list()) {
 #' test_data_ex <- data_ml[101:150, c(1,2,5:10)]
 #' svm_pred(train_data_ex, test_data_ex, config = list())
 #' }
-svm_pred <- function(train_data, test_data, config = list()) {
+svm_pred <- function(train_data, test_data, config = list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
   # Default parameters for SVM
   default_params <- list(
     type = "eps-regression",    # SVM task type (regression in this case)
@@ -356,6 +372,7 @@ svm_pred <- function(train_data, test_data, config = list()) {
 #' @param train_data A data frame with stock_id, date, return_label, and features.
 #' @param test_data A data frame with stock_id, date, and features.
 #' @param config A list containing parameters for the neural network, such as size and decay.
+#' @param seed integer. Seed for random number generation
 #'
 #' @return A tibble with stock_id, date, and predicted returns matching the test data.
 #' @importFrom nnet nnet
@@ -370,7 +387,10 @@ svm_pred <- function(train_data, test_data, config = list()) {
 #' test_data_ex <- data_ml[101:150, ]
 #' nnet_pred(train_data_ex, test_data_ex, config = list())
 #' }
-nnet_pred <- function(train_data, test_data, config = list()) {
+nnet_pred <- function(train_data, test_data, config = list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
   # Default parameters for neural network
   default_params <- list(
     size = 5,       # Number of units in the hidden layer
@@ -423,6 +443,7 @@ nnet_pred <- function(train_data, test_data, config = list()) {
 #' @param train_data A data frame with stock_id, date, return_label, and features.
 #' @param test_data A data frame with stock_id, date, and features.
 #' @param config A list of configuration settings, containing the method, tuneGrid, and trControl for caret.
+#' @param seed integer. Seed for random number generation
 #'
 #' @return A tibble with stock_id, date, and predicted returns for the test data.
 #' @importFrom caret train
@@ -438,43 +459,49 @@ nnet_pred <- function(train_data, test_data, config = list()) {
 #'                trControl = caret::trainControl(method = "cv", number = 5))
 #' caret_wrapper(train_data_ex, test_data_ex, config)
 #' }
-caret_wrapper <- function(train_data, test_data, config = list()) {
+caret_wrapper <- function(train_data, test_data, config = list(), seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
 
-  # Ensure the method, tuneGrid, and trControl are provided
-  if (!"method" %in% names(config)) stop("Please provide a 'method' for caret model training in the config list.")
-  if (!"trControl" %in% names(config)) config$trControl <- caret::trainControl(method = "none")
+  # Extract method, tuneGrid, trControl from config
+  method <- config$method
+  tuneGrid <- config$tuneGrid
+  trControl <- config$trControl
 
-  # Handle missing values
-  check_missing_values(train_data)
-  check_missing_values(test_data)
-
-  # Encode categorical data
-  full_data <- bind_rows(train_data, test_data)
-  full_data <- encode_categorical(full_data)
-
-  # Split data back
-  train_data <- full_data$data[1:nrow(train_data), ]
-  test_data <- full_data$data[(nrow(train_data) + 1):nrow(full_data$data), -3]
+  # Handle missing values and encode categorical data (assumed to be done before)
 
   # Prepare training features and labels
-  train_features <- as.matrix(train_data[, 4:ncol(train_data)])
-  train_label <- as.matrix(train_data[, 3])
+  train_features <- train_data %>% select(-stock_id, -date, -return_label)
+  train_label <- train_data$return_label
 
-  # Train the model using caret
-  model <- caret::train(
-    x = train_features,
-    y = as.numeric(train_label),
-    method = config$method,
-    tuneGrid = config$tuneGrid,
-    trControl = config$trControl
+  test_features <- test_data %>% select(-stock_id, -date)
+
+  # Train the model using caret::train
+  model <- tryCatch({
+    caret::train(
+      x = train_features,
+      y = train_label,
+      method = method,
+      tuneGrid = tuneGrid,
+      trControl = trControl
+    )
+  }, error = function(e) {
+    cli::cli_abort("Caret training failed: {e$message}")
+  })
+
+  # Predict using the trained model
+  predictions <- tryCatch({
+    predict(model, newdata = test_features)
+  }, error = function(e) {
+    cli::cli_abort("Caret prediction failed: {e$message}")
+  })
+
+  # Return predictions
+  tibble::tibble(
+    stock_id = test_data$stock_id,
+    date = test_data$date,
+    pred_return = predictions
   )
-
-  # Prepare test data and predict
-  test_features <- as.matrix(test_data[, 3:ncol(test_data)])
-  predictions <- predict(model, newdata = test_features)
-
-  # Match predictions back to stock_id and date
-  predictions <- tibble::tibble(stock_id = test_data$stock_id, date = test_data$date, pred_return = predictions)
-
-  return(predictions)
 }
+

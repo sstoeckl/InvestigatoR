@@ -4,7 +4,7 @@
 \alias{enet_pred}
 \title{Elastic Net Prediction Function}
 \usage{
-enet_pred(train_data, test_data, config = list())
+enet_pred(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{data frame with stock_id, date, return_label, and features}
@@ -12,6 +12,8 @@ enet_pred(train_data, test_data, config = list())
 \item{test_data}{data frame with stock_id, date, and features}
 
 \item{config}{list with Elastic Net parameters (alpha and lambda)}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 tibble with stock_id, date, and pred_return matching the test_data

@@ -4,7 +4,7 @@
 \alias{nnet_pred}
 \title{Neural Network (nnet) Prediction Function}
 \usage{
-nnet_pred(train_data, test_data, config = list())
+nnet_pred(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{A data frame with stock_id, date, return_label, and features.}
@@ -12,6 +12,8 @@ nnet_pred(train_data, test_data, config = list())
 \item{test_data}{A data frame with stock_id, date, and features.}
 
 \item{config}{A list containing parameters for the neural network, such as size and decay.}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 A tibble with stock_id, date, and predicted returns matching the test data.

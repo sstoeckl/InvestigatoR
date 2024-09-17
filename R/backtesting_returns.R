@@ -22,6 +22,7 @@
 #' predicted returns.
 #' @param num_cores The number of cores that should be used for parallel processing. If set to `NULL`, the ML iterations will be done sequentially.
 #' @param verbose If `TRUE`, detailed messages will be printed. Default is `TRUE`.
+#' @param seed integer. Seed for random number generation
 #'
 #' @return An S3 object of class `returnPrediction` that contains all the information associated with the backtesting results. It includes information on the used models (`rp$models`), the predictions (`rp$predictions`), the actual returns (`rp$actual_returns`), and the errors (`rp$errors`).
 #'
@@ -67,7 +68,8 @@
 #'   ml_config = ml_config,
 #'   append = FALSE,
 #'   num_cores = NULL,
-#'   verbose = TRUE
+#'   verbose = TRUE,
+#'   seed=123
 #' )
 #' }
 backtesting_returns <- function(data,
@@ -82,7 +84,8 @@ backtesting_returns <- function(data,
                                 ml_config,
                                 append = FALSE,
                                 num_cores = NULL,
-                                verbose = TRUE) {
+                                verbose = TRUE,
+                                seed = 123) {
 
   # Input Validation
   checkmate::assert_data_frame(data, min.rows = 1, min.cols = 3)
@@ -117,7 +120,7 @@ backtesting_returns <- function(data,
   if (verbose) {
     handlers("progress")
   } else {
-    handlers("null")
+    handlers("none")
   }
 
   # Start progress handler
@@ -125,7 +128,7 @@ backtesting_returns <- function(data,
     p <- progressor(along = seq_along(ml_config) * length(ml_config[[1]]) )  # Adjust based on number of models and configs
 
     # Data Preprocessing
-    cli::cli_info("Preprocessing data...")
+    cli::cli_inform("Preprocessing data...")
     data <- data %>%
       rename(stock_id = 1, date = 2) %>%
       mutate(date = as.Date(date, tryFormats = c("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y")))
@@ -187,7 +190,7 @@ backtesting_returns <- function(data,
 
     # Create returnPrediction object if not provided
     if (is.null(return_prediction_object)) {
-      cli::cli_info("Creating a new returnPrediction object.")
+      cli::cli_inform("Creating a new returnPrediction object.")
       return_prediction_object <- create_return_prediction(data_subset, return_label)
     }
 
@@ -200,7 +203,8 @@ backtesting_returns <- function(data,
       step_size = step_size,
       offset = offset,
       in_sample = in_sample,
-      indices = indices
+      indices = indices,
+      seed = seed  # Pass seed to config
     )
 
     # Set up parallel processing
@@ -229,12 +233,16 @@ backtesting_returns <- function(data,
         cli::cli_alert_info("  Processing config {j}/{length(configs)}: {config_name} with function {pred_func}")
         p()
 
+        # Merge seed into config if necessary
+        config_with_seed <- purrr::list_modify(config, seed = seed)
+
         # Use future_map_dfr for parallel processing and combine results
         predictions <- tryCatch({
           furrr::future_map_dfr(
             seq(nrow(indices)),
-            ~ retpred_map(.x, data_subset, indices, pred_func, config),
-            .options = furrr::furrr_options(seed = TRUE)
+            ~ retpred_map(.x, data_subset, indices, pred_func, config_with_seed),
+            .options = furrr::furrr_options(seed = TRUE,    packages = "InvestigatoR"  # Ensure the package is loaded in workers
+                                            )
           )
         }, error = function(e) {
           cli::cli_alert_danger("Error in model '{model_name}' with config '{config_name}': {e$message}")

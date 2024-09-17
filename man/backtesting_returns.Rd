@@ -17,7 +17,8 @@ backtesting_returns(
   ml_config,
   append = FALSE,
   num_cores = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  seed = 123
 )
 }
 \arguments{
@@ -53,6 +54,8 @@ predicted returns.}
 \item{num_cores}{The number of cores that should be used for parallel processing. If set to \code{NULL}, the ML iterations will be done sequentially.}
 
 \item{verbose}{If \code{TRUE}, detailed messages will be printed. Default is \code{TRUE}.}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 An S3 object of class \code{returnPrediction} that contains all the information associated with the backtesting results. It includes information on the used models (\code{rp$models}), the predictions (\code{rp$predictions}), the actual returns (\code{rp$actual_returns}), and the errors (\code{rp$errors}).

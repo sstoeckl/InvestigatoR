@@ -4,7 +4,7 @@
 \alias{xgb_pred}
 \title{XGB function for return prediction}
 \usage{
-xgb_pred(train_data, test_data, config = list())
+xgb_pred(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{data frame with stock_id, date, return_label and features}
@@ -12,6 +12,8 @@ xgb_pred(train_data, test_data, config = list())
 \item{test_data}{data frame with stock_id, date and features}
 
 \item{config}{empty list, as ols does not need any configuration}
+
+\item{seed}{integer. Seed for random number generation}
 
 \item{fast}{logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R}
 }

@@ -1,0 +1,14 @@
+---
+title: "Vignette: Troubleshooting `InvestigatoR`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Troubleshooting InvestigatoR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)

@@ -4,7 +4,7 @@
 \alias{svm_pred}
 \title{Support Vector Machine (SVM) Prediction Function}
 \usage{
-svm_pred(train_data, test_data, config = list())
+svm_pred(train_data, test_data, config = list(), seed = NULL)
 }
 \arguments{
 \item{train_data}{A data frame with stock_id, date, return_label, and features.}
@@ -12,6 +12,8 @@ svm_pred(train_data, test_data, config = list())
 \item{test_data}{A data frame with stock_id, date, and features.}
 
 \item{config}{A list of SVM configuration parameters (e.g., kernel, type, gamma, cost, epsilon).}
+
+\item{seed}{integer. Seed for random number generation}
 }
 \value{
 A tibble with stock_id, date, and predicted returns matching the test data.

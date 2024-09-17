@@ -69,12 +69,12 @@ backtesting_portfolios <- function(return_prediction_object,
 
   # Initialize verbose messaging
   if (verbose) {
-    cli::cli_info("Starting backtesting_portfolios...")
+    cli::cli_inform("Starting backtesting_portfolios...")
   }
 
   # Create portfolio_object if not provided
   if (is.null(portfolio_object)) {
-    cli::cli_info("Creating a new portfolio object.")
+    cli::cli_inform("Creating a new portfolio object.")
     # Assuming create_portfolios is a helper function that initializes a portfolio object
     portfolio_object <- create_portfolios(return_prediction_object$actual_returns, "actual_return")
   }
@@ -154,7 +154,7 @@ backtesting_portfolios <- function(return_prediction_object,
 
   # Final Message
   if (verbose) {
-    cli::cli_info("Completed backtesting_portfolios.")
+    cli::cli_inform("Completed backtesting_portfolios.")
   }
 
   # Return the portfolio_object
