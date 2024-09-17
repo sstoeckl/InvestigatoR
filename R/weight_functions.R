@@ -73,7 +73,7 @@ quantile_weights <- function(return_predictions, errors, constraints=NULL) {
         quantile_long = quantile(pred, probs = 1 - constraints$quantiles$long),
         weight = ifelse(pred>=quantile_long,1,0)) |>
       dplyr::mutate( # apply max/min weights
-        weight = pmax(weight, constraints$min_weight)
+        weight = pmax(weight, -0.1)
       ) |>
       dplyr::group_by(date) |>
       dplyr::mutate( # apply sum constraint

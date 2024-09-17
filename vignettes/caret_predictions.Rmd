@@ -1,0 +1,133 @@
+---
+title: "Vignette: Using Caret for Model Training with and without Hyperparameter Tuning"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using caret to create predictions}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This vignette will show how to integrate `caret` models into the `InvestigatoR` workflow using block-based cross-validation for hyperparameter tuning.
+
+### Step 1: Load the Packages and Data
+
+```{r load_packages, message = FALSE, warning = FALSE}
+library(InvestigatoR)
+library(tidyverse)
+library(caret)
+
+# Load sample data
+data("data_ml")
+```
+
+### Step 2: Define Features and Prediction Configuration
+
+We specify features, labels, and configurations for the models to predict returns.
+
+```{r load_data}
+return_label <- "R1M_Usd"
+features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+rolling <- FALSE; window_size = "5 years"; step_size = "1 year"; offset = "1 month"; in_sample = TRUE
+```
+
+### Step 3: `caret` Model Configurations
+
+In the following code blocks, we define configurations for Elastic Net, SVM, and Random Forest models with and without hyperparameter tuning using `caret`.
+
+#### Elastic Net (with and without tuning)
+
+First, we define the hyperparameter grid for Elastic Net models.
+
+
+```{r enet_tune_grid}
+enet_tune_grid <- expand.grid(alpha = c(0.1, 0.5, 0.9), lambda = seq(0.01, 0.1, by = 0.02))
+
+ml_config <- list(
+  enet_no_tune = list(pred_func = "caret_wrapper", config = list(method = "glmnet")),
+  enet_tuned = list(pred_func = "caret_wrapper", 
+                    config1 = list(method = "glmnet", tuneGrid = enet_tune_grid, 
+                                  trControl = trainControl(method = "cv", number = 5, returnResamp = "final")))
+)
+```
+
+#### SVM (with and without tuning)
+
+Second, we define the hyperparameter grid for SVM models.
+
+```{r svm_tune_grid}
+svm_tune_grid <- expand.grid(C = c(0.1, 1, 10), gamma = c(0.01, 0.05, 0.1))
+
+ml_config <- append(ml_config, list(
+  svm_no_tune = list(pred_func = "caret_wrapper", config = list(method = "svmRadial")),
+  svm_tuned = list(pred_func = "caret_wrapper", 
+                   config = list(method = "svmRadial", tuneGrid = svm_tune_grid, 
+                                 trControl = trainControl(method = "cv", number = 5, returnResamp = "final")))
+))
+```
+
+#### Random Forest (with and without tuning)
+
+Third, we define the hyperparameter grid for Random Forest models.
+
+```{r rf_tune_grid}
+rf_tune_grid <- expand.grid(mtry = c(3, 5, 7))
+
+ml_config <- append(ml_config, list(
+  rf_no_tune = list(pred_func = "caret_wrapper", config = list(method = "ranger")),
+  rf_tuned = list(pred_func = "caret_wrapper", 
+                  config = list(method = "ranger", tuneGrid = rf_tune_grid, 
+                                trControl = trainControl(method = "cv", number = 5, returnResamp = "final")))
+))
+```
+
+### Step 4: Running the Backtesting Function
+
+Now, we run the backtesting function to generate predictions for the models defined above.
+
+```{r run_backtesting}
+rp <- backtesting_returns(data = data_ml, return_prediction_object = NULL, 
+                          return_label = return_label, features = features, 
+                          rolling = rolling, window_size = window_size, step_size = step_size, 
+                          offset = offset, in_sample = in_sample, ml_config = ml_config, append = FALSE)
+```
+
+### Step 5: Analyzing Prediction Statistics
+
+```{r rp_stats}
+rp_stats <- summary(rp)
+print(rp_stats)
+```
+
+### Step 6: Portfolio Formation and Performance
+
+```{r pf_config}
+pf_config <- list(
+  predictions = c("caret_wrapper_1", "caret_wrapper_2"),
+  quantile_weight = list(pred_func = "quantile_weights", 
+                         config1 = list(quantiles = list(long = 0.20, short = 0.20), allow_short_sale = FALSE,
+                          min_weight = 0,  max_weight = 1, b = 1))
+)
+
+pf <- backtesting_portfolios(return_prediction_object = rp, pf_config = pf_config)
+pf_stats <- summary(pf)
+print(pf_stats)
+```
+
+### Step 7: Visualizing Portfolio Performance
+
+```{r pf_plot}
+plot(pf, type = "chart.CumReturns")
+```
+
+---
+
+### Conclusion:
+
+This vignette demonstrated how to integrate `caret` models (Elastic Net, SVM, Random Forest) into the `InvestigatoR` workflow. We trained models both with and without hyperparameter tuning, analyzed prediction statistics, and evaluated portfolio performance based on these predictions. This approach ensures flexibility and rigor in backtesting machine learning models for return prediction.

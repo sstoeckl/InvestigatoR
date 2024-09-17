@@ -7,24 +7,24 @@
 svm_pred(train_data, test_data, config = list())
 }
 \arguments{
-\item{train_data}{Data frame containing training data with features and a target variable.}
+\item{train_data}{A data frame with stock_id, date, return_label, and features.}
 
-\item{test_data}{Data frame containing test data with features.}
+\item{test_data}{A data frame with stock_id, date, and features.}
 
-\item{config}{List containing any additional parameters for the SVM model.}
+\item{config}{A list of SVM configuration parameters (e.g., kernel, type, gamma, cost, epsilon).}
 }
 \value{
-A tibble with stock_id, date, and predicted returns.
+A tibble with stock_id, date, and predicted returns matching the test data.
 }
 \description{
-Trains a Support Vector Machine using the e1071 package and predicts outcomes
-for the provided test data set based on the trained model.
+This function trains a Support Vector Machine (SVM) model to predict returns based on the provided
+training data and makes predictions for the test data.
 }
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100,c(1,2,96,5:10)]
-test_data_ex <- data_ml[101:150,c(1,2,5:10)]
-svm_pred(train_data_ex, test_data_ex, config)
+train_data_ex <- data_ml[1:100, c(1,2,96,5:10)]
+test_data_ex <- data_ml[101:150, c(1,2,5:10)]
+svm_pred(train_data_ex, test_data_ex, config = list())
 }
 }

@@ -235,3 +235,25 @@ check_missing_values <- function(data) {
     warning(warning_message)
   }
 }
+# Ensure config utility
+#' Ensure Configuration
+#'
+#' This function checks a configuration list for missing arguments and adds default values if necessary.
+#'
+#' @param config A list of configuration parameters.
+#' @param default_params A list of default parameters.
+#'
+#' @return A list of configuration parameters with any missing arguments filled in with default values.
+#'
+#' @export
+#'
+ensure_config <- function(config, default_params) {
+  missing_args <- setdiff(names(default_params), names(config))
+  if (length(missing_args) > 0) {
+    message("Adding default values for missing arguments: ", paste(missing_args, collapse=", "))
+    for (arg in missing_args) {
+      config[[arg]] <- default_params[[arg]]
+    }
+  }
+  return(config)
+}#' Check for Missing Values

@@ -44,40 +44,40 @@
 #'   return_label, features, rolling, window_size, step_size, offset, in_sample, ml_config, append=FALSE, num_cores=NULL)
 #'
 #' }
-backtesting_returns <- function(data_ml, return_prediction_object=NULL, return_label, features,
+backtesting_returns <- function(data, return_prediction_object=NULL, return_label, features,
                                 rolling = TRUE, window_size, step_size = 1, offset = 0, in_sample = TRUE,
                                 ml_config, append = FALSE, num_cores = NULL) {
   ## Check inputs for consistency
   # data
-  data_ml <- data_ml |> dplyr::rename(stock_id=1, date=2)
+  data <- data |> dplyr::rename(stock_id=1, date=2)
   # format date column as date, stop with error message if not possible
-  data_ml <- data_ml %>%
+  data <- data %>%
     dplyr::mutate(date = as.Date(date, tryFormats = c("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y")))
     # Check if the date conversion was successful
-    if (any(is.na(data_ml$date))) {
+    if (any(is.na(data$date))) {
       stop("Date conversion failed. Please check the date format.")
     }
   # Check for the presence of return label and features
-  if (!return_label %in% colnames(data_ml)) {
+  if (!return_label %in% colnames(data)) {
     stop("The label 'return' is missing from the dataset.")
   }
-  missing_features <- setdiff(features, colnames(data_ml))
+  missing_features <- setdiff(features, colnames(data))
   if (length(missing_features) > 0) {
     stop(paste("The following features are missing from the dataset:", paste(missing_features, collapse = ", ")))
   }
   # check for NAs
-  missing_values <- sum(is.na(data_ml))
+  missing_values <- sum(is.na(data))
   if (missing_values > 0) {
     stop(paste("The dataset contains", missing_values, "missing values. Please handle missing data."))
   }
   # check for duplicate rows
-  duplicate_rows <- nrow(data_ml) - nrow(distinct(data_ml))
+  duplicate_rows <- nrow(data) - nrow(distinct(data))
   if (duplicate_rows > 0) {
     stop(paste("The dataset contains", duplicate_rows, "duplicate rows. Please remove duplicates."))
   }
   ### Now comes the main task
   # Extract dates
-  dates <- data_ml %>% dplyr::select(date) %>% dplyr::distinct() %>% dplyr::arrange(date) %>% dplyr::pull(date)
+  dates <- data %>% dplyr::select(date) %>% dplyr::distinct() %>% dplyr::arrange(date) %>% dplyr::pull(date)
 
   # Generate tibble with training/prediction start & end dates
   indices <- select_dates_by_offset(dates, window_size, step_size, offset, rolling)
@@ -88,7 +88,7 @@ backtesting_returns <- function(data_ml, return_prediction_object=NULL, return_l
 
 
   # subset data to desired label and features (make sure, label is in position "3")
-  data_subset <- data_ml %>% dplyr::select(stock_id, date, dplyr::all_of(return_label), dplyr::all_of(features))
+  data_subset <- data %>% dplyr::select(stock_id, date, dplyr::all_of(return_label), dplyr::all_of(features))
 
   # based on data subset check (and if necessary create returnPrediction ob ject
   # return prediction object
@@ -117,12 +117,12 @@ backtesting_returns <- function(data_ml, return_prediction_object=NULL, return_l
   }
   # now we loop through the models in the ml_config list
   for (i in 1:length(ml_config)) {
-    cat("Currently processing model", i, "of", length(ml_config), "\n")
+    cat("Currently processing model", i, "named",names(ml_config)[i], "of", length(ml_config), "\n")
     # extract model name and config
     model_name <- names(ml_config)[i]
     # we loop over the number of configs per model
     for (j in 2:length(ml_config[[model_name]])){
-      cat("Specifically processing config", j-1, "of", length(ml_config[[model_name]])-1, "\n")
+      cat("Specifically processing config", j-1,"with prediction function",ml_config[[model_name]]$pred_func, "of", length(ml_config[[model_name]])-1, "\n")
     model_specs <- ml_config[[model_name]]
     # extract model function and config
     model_function <- model_specs$pred_func
@@ -130,7 +130,7 @@ backtesting_returns <- function(data_ml, return_prediction_object=NULL, return_l
     # map over the times in indices using port_map
     map_indices <- seq(nrow(indices))
 
-    back_test <- map_indices %>%             # Test on the first 100 out-of-sample dates
+    back_test <- map_indices[1] %>%
       furrr::future_map(retpred_map, data_subset, indices, model_function, model_config) %>%
       dplyr::bind_rows() |>
       dplyr::rename(prediction=pred_return)

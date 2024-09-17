@@ -5,7 +5,7 @@
 \title{This function is used to use ML to predict the returns that will later be used for a trading strategy}
 \usage{
 backtesting_returns(
-  data_ml,
+  data,
   return_prediction_object = NULL,
   return_label,
   features,
@@ -20,6 +20,10 @@ backtesting_returns(
 )
 }
 \arguments{
+\item{data}{ML dataset (tibble/data.frame) in long format that should contain the features and the return_label as well as the stock_ids (first column) and
+dates (second column). FOr most ML algorithms to work this data set should not contain missing values. Sometimes it needs
+to be balanced in terms of number of stocks available at each point in time.}
+
 \item{return_prediction_object}{an object of class returnPrediction that should be used to store the predictions. Defaul(NULL) creates a new one.
 In case an existing object is passed, given append=TRUE, new predictions are added. If append=FALSE, the object is overwritten.}
 
@@ -44,10 +48,6 @@ and prediction (to avoid look-ahead bias). Default is 0.}
 
 \item{append}{if TRUE, the function will append the predicted returns to the original dataset. If FALSE, the function will return a new dataset that contains the
 predicted returns.}
-
-\item{data}{ML dataset (tibble/data.frame) in long format that should contain the features and the return_label as well as the stock_ids (first column) and
-dates (second column). FOr most ML algorithms to work this data set should not contain missing values. Sometimes it needs
-to be balanced in terms of number of stocks available at each point in time.}
 
 \item{verbose}{num_cores the number of cores that should be used for parallel processing. If set to NULL the ML iterations will be done sequentially.}
 }

@@ -2,9 +2,9 @@
 % Please edit documentation in R/returnPredictors.R
 \name{xgb_pred}
 \alias{xgb_pred}
-\title{xgb function for return prediction}
+\title{XGB function for return prediction}
 \usage{
-xgb_pred(train_data, test_data, config)
+xgb_pred(train_data, test_data, config = list())
 }
 \arguments{
 \item{train_data}{data frame with stock_id, date, return_label and features}
@@ -19,7 +19,7 @@ xgb_pred(train_data, test_data, config)
 tibble with stock_id, date and pred_return matching the test_data
 }
 \description{
-xgb function for return prediction
+XGB function for return prediction
 }
 \examples{
 \dontrun{

@@ -2,40 +2,29 @@
 % Please edit documentation in R/returnPredictors.R
 \name{nnet_pred}
 \alias{nnet_pred}
-\title{Neural Network Prediction Function}
+\title{Neural Network (nnet) Prediction Function}
 \usage{
-nnet_pred(train_data, test_data, config)
+nnet_pred(train_data, test_data, config = list())
 }
 \arguments{
-\item{train_data}{data frame with stock_id, date, return_label, and features}
+\item{train_data}{A data frame with stock_id, date, return_label, and features.}
 
-\item{test_data}{data frame with stock_id, date, and features}
+\item{test_data}{A data frame with stock_id, date, and features.}
 
-\item{config}{list with neural network parameters (size, decay)}
+\item{config}{A list containing parameters for the neural network, such as size and decay.}
 }
 \value{
-A tibble with stock_id, date, and predicted returns.
-
-tibble with stock_id, date, and pred_return matching the test_data
+A tibble with stock_id, date, and predicted returns matching the test data.
 }
 \description{
-Trains a neural network using the nnet package and makes predictions
+This function trains a neural network using the nnet package and makes predictions
 for the test data set.
 }
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100,]
-test_data_ex <- data_ml[101:150,]
-config <- list(size = 5, decay = 0.1)
-nnet_pred(train_data_ex, test_data_ex, config)
-}
-Neural Network (nnet) function for return prediction
-
-\dontrun{
-data(data_ml)
-train_data_ex <- data_ml[1:100, c(1,2,96,5:10)]
-test_data_ex <- data_ml[101:150, c(1,2,5:10)]
-nnet_pred(train_data_ex, test_data_ex, config = list(size = 5, decay = 0.1))
+train_data_ex <- data_ml[1:100, ]
+test_data_ex <- data_ml[101:150, ]
+nnet_pred(train_data_ex, test_data_ex, config = list())
 }
 }

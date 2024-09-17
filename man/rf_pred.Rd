@@ -2,31 +2,29 @@
 % Please edit documentation in R/returnPredictors.R
 \name{rf_pred}
 \alias{rf_pred}
-\title{random forest function for return prediction}
+\title{Random Forest function for return prediction}
 \usage{
-rf_pred(train_data, test_data, config)
+rf_pred(train_data, test_data, config = list())
 }
 \arguments{
-\item{train_data}{data frame with stock_id, date, return_label and features}
+\item{train_data}{A data frame with stock_id, date, return_label, and features.}
 
-\item{test_data}{data frame with stock_id, date and features}
+\item{test_data}{A data frame with stock_id, date, and features.}
 
-\item{config}{empty list, as ols does not need any configuration}
-
-\item{fast}{logical, if TRUE, use fastLm from RcppArmadillo, else use lm from base R}
+\item{config}{A list of random forest configuration parameters (e.g., num.trees, mtry).}
 }
 \value{
-tibble with stock_id, date and pred_return matching the test_data
+A tibble with stock_id, date, and predicted returns matching the test data.
 }
 \description{
-random forest function for return prediction
+This function trains a Random Forest model to predict returns based on the provided training data
+and predicts returns for the test data.
 }
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100,c(1,2,96,5:10)]
-test_data_ex <- data_ml[101:150,c(1,2,5:10)]
-rf_pred(train_data_ex, test_data_ex, config=list())
+train_data_ex <- data_ml[1:100, c(1,2,96,5:10)]
+test_data_ex <- data_ml[101:150, c(1,2,5:10)]
+rf_pred(train_data_ex, test_data_ex, config = list(num.trees = 200, mtry = 4))
 }
-
 }
