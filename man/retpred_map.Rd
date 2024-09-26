@@ -21,5 +21,5 @@ retpred_map(t, data_subset, indices, model_function, model_config)
 Tibble containing \code{stock_id}, \code{date}, and \code{pred_return}.
 }
 \description{
-Return Prediction Mapping Function (Helper)
+This helper function is used within \code{backtesting_returns} to map over time indices and generate return predictions using specified ML models.
 }
