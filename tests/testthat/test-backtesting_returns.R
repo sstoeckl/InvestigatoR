@@ -91,7 +91,7 @@ test_that("ols_pred produces correct output structure", {
   train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
   test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
 
-  predictions <- ols_pred(train_data_ex, test_data_ex, config = list(), fast = TRUE)
+  predictions <- ols_pred(train_data_ex, test_data_ex, config = list())
 
   expect_s3_class(predictions,"tbl_df")
   expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
@@ -202,12 +202,11 @@ test_that("caret_wrapper trains models without errors and returns correct struct
     config <- caret_configs[[config_name]]
     # Capture verbose output
     predictions <- tryCatch(
-      caret_wrapper(
+      suppressWarnings(caret_wrapper(
         train_data = train_data_ex,
         test_data = test_data_ex,
-        config = config,
-        verbose = FALSE
-      ),
+        config = config
+      )),
       error = function(e) {
         fail(paste("caret_wrapper failed for configuration:", config_name, "Error:", e$message))
       }
