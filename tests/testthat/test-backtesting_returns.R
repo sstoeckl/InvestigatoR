@@ -1,229 +1,64 @@
-#' Backtesting Returns Function
-#'
-#' This function utilizes machine learning models to predict asset returns, which are subsequently used for portfolio trading strategies.
-#'
-#' @param data ML dataset (tibble/data.frame) in long format containing the features, return label, stock IDs (first column), and dates (second column).
-#'   The dataset should be free of missing values and, if necessary, balanced in terms of the number of stocks available at each point in time.
-#' @param return_prediction_object An object of class `returnPrediction` to store the predictions. Default is `NULL`, which creates a new object.
-#'   If an existing object is provided and `append = TRUE`, new predictions are added. If `append = FALSE`, the object is overwritten.
-#' @param return_label The prediction label to be used for the ML model. It should be appropriately shifted (e.g., the label for date `t` should correspond to returns from date `t+1`).
-#' @param features A character vector of feature names to be used for the ML model.
-#' @param rolling Logical indicating whether to use a rolling window approach (`TRUE`) or an expanding window approach (`FALSE`) for prediction.
-#' @param window_size The size of the window for the rolling window approach. Can be specified in number of time steps or as a period (e.g., "1 year", "6 months").
-#'   If `rolling = FALSE`, this represents the starting window size for the expanding window approach.
-#' @param step_size The interval at which the prediction window moves forward (e.g., "1 month", "15 days"). Default is "1 month".
-#' @param offset The size of the data to be left unused between training and prediction to avoid look-ahead bias. Can be specified in time steps or periods (e.g., "1 month"). Default is "0".
-#' @param in_sample Logical indicating whether to provide in-sample predictions for the training period (+ offset). Default is `TRUE`.
-#' @param ml_config A list containing configurations for the ML models. Each element should specify the prediction function and its respective configurations.
-#' @param append Logical indicating whether to append the predicted returns to the original dataset (`TRUE`) or overwrite the existing `returnPrediction` object (`FALSE`).
-#' @param num_cores The number of cores to be used for parallel processing. If set to `NULL`, ML iterations are performed sequentially.
-#' @param verbose Logical indicating whether to display detailed progress messages. Default is `FALSE`.
-#'
-#' @return An S3 object of class `returnPrediction` containing models, predictions, actual returns, and errors.
-#'
-#' @importFrom dplyr bind_rows distinct arrange pull mutate rename select all_of
-#' @importFrom tibble tibble
-#' @import future
-#' @importFrom furrr future_map_dfr
-#' @import checkmate
-#' @importFrom cli cli_inform cli_alert_info cli_alert_success cli_alert_warning cli_progress_bar cli_progress_update cli_progress_done
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' data(data_ml)
-#' data_subset <- data_ml |>  filter(stock_id<=30)
-#' return_label <- "R1M_Usd"
-#' features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
-#' rolling <- TRUE
-#' window_size <- "5 years"
-#' step_size <- "3 months"
-#' offset <- "1 year"
-#' in_sample <- TRUE
-#' ml_config <- list(
-#'   ols_pred = list(pred_func = "ols_pred", config = list()),
-#'   xgb_pred = list(
-#'     pred_func = "xgb_pred",
-#'     config1 = list(nrounds = 100, max_depth = 3, eta = 0.3, objective = "reg:squarederror"),
-#'     config2 = list(nrounds = 100, max_depth = 4, eta = 0.1, objective = "reg:squarederror")
-#'   )
-#' )
-#' rp <- backtesting_returns(
-#'   data = data_subset,
-#'   return_prediction_object = NULL,
-#'   return_label = return_label,
-#'   features = features,
-#'   rolling = rolling,
-#'   window_size = window_size,
-#'   step_size = step_size,
-#'   offset = offset,
-#'   in_sample = in_sample,
-#'   ml_config = ml_config,
-#'   append = FALSE,
-#'   num_cores = NULL,
-#'   verbose = TRUE
-#' )
-#' }
-backtesting_returns <- function(data, return_prediction_object = NULL, return_label, features,
-                                rolling = TRUE, window_size, step_size = "1 month", offset = "0",
-                                in_sample = TRUE, ml_config, append = FALSE, num_cores = NULL,
-                                verbose = FALSE) {
+# tests/testthat/test-backtesting_returns.R
 
-  # Input Validation using checkmate
-  if (verbose) {
-    cli::cli_inform("Starting input validation...")
-  }
+library(testthat)
+library(InvestigatoR)
+library(tidyverse)
 
-  # Validate 'data'
-  checkmate::assert_data_frame(data, min.rows = 1, any.missing = FALSE, .var.name = "data")
+# Load the data_ml dataset
+data("data_ml")
 
-  # Validate 'return_prediction_object'
-  if (!is.null(return_prediction_object)) {
-    checkmate::assert_class(return_prediction_object, "returnPrediction", .var.name = "return_prediction_object")
-  }
+# Create a small subset of data_ml for testing
+test_data_ml <- data_ml %>%
+  filter(stock_id<=5)
 
-  # Validate 'return_label'
-  checkmate::assert_string(return_label, min.chars = 1, .var.name = "return_label")
-  if (!return_label %in% colnames(data)) {
-    cli::cli_abort("The label '{return_label}' is missing from the dataset.")
-  }
+# Define common parameters for testing
+return_label <- "R1M_Usd"
+features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+rolling <- FALSE
+window_size <- "5 years"
+step_size <- "1 month"
+offset <- "1 month"
+in_sample <- TRUE
 
-  # Validate 'features'
-  checkmate::assert_character(features, min.len = 1, .var.name = "features")
-  missing_features <- setdiff(features, colnames(data))
-  if (length(missing_features) > 0) {
-    cli::cli_abort("The following features are missing from the dataset: {paste(missing_features, collapse = ', ')}")
-  }
-
-  # Validate 'rolling'
-  checkmate::assert_flag(rolling, .var.name = "rolling")
-
-  # Validate 'window_size'
-  checkmate::assert_string(window_size, min.chars = 1, .var.name = "window_size")
-
-  # Validate 'step_size'
-  checkmate::assert_string(step_size, min.chars = 1, .var.name = "step_size")
-
-  # Validate 'offset'
-  checkmate::assert_string(offset, min.chars = 1, .var.name = "offset")
-
-  # Validate 'in_sample'
-  checkmate::assert_flag(in_sample, .var.name = "in_sample")
-
-  # Validate 'ml_config'
-  checkmate::assert_list(ml_config, min.len = 1, .var.name = "ml_config")
-
-  # Validate 'append'
-  checkmate::assert_flag(append, .var.name = "append")
-
-  # Validate 'num_cores'
-  if (!is.null(num_cores)) {
-    checkmate::assert_integer(num_cores, len = 1, lower = 1, .var.name = "num_cores")
-  }
-
-  # Validate 'verbose'
-  checkmate::assert_flag(verbose, .var.name = "verbose")
-
-  if (verbose) {
-    cli::cli_alert_success("Input validation passed.")
-  }
-
-  ## Data Preparation
-  if (verbose) {
-    cli::cli_inform("Renaming first two columns to 'stock_id' and 'date'...")
-  }
-  data <- data %>% dplyr::rename(stock_id = 1, date = 2)
-
-  if (verbose) {
-    cli::cli_inform("Converting 'date' column to Date type...")
-  }
-  data <- data %>%
-    dplyr::mutate(date = as.Date(date, tryFormats = c("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y")))
-
-  # Check date conversion
-  if (any(is.na(data$date))) {
-    cli::cli_abort("Date conversion failed. Please check the date format in the 'date' column.")
-  }
-
-  if (verbose) {
-    cli::cli_inform("Checking for missing values...")
-  }
-  # Check for NAs
-  missing_values <- sum(is.na(data))
-  if (missing_values > 0) {
-    cli::cli_abort("The dataset contains {missing_values} missing values. Please handle missing data before proceeding.")
-  }
-
-  if (verbose) {
-    cli::cli_inform("Checking for duplicate rows...")
-  }
-  # Check for duplicate rows
-  duplicate_rows <- nrow(data) - nrow(dplyr::distinct(data))
-  if (duplicate_rows > 0) {
-    cli::cli_abort("The dataset contains {duplicate_rows} duplicate rows. Please remove duplicates before proceeding.")
-  }
-
-  if (verbose) {
-    cli::cli_inform("Extracting and arranging unique dates...")
-  }
-  # Extract and arrange unique dates
-  dates <- data %>%
-    dplyr::select(date) %>%
-    dplyr::distinct() %>%
-    dplyr::arrange(date) %>%
-    dplyr::pull(date)
-
-  if (verbose) {
-    cli::cli_inform("Generating training and prediction indices based on offset and window settings...")
-  }
-  # Generate training and prediction indices
-  indices <- select_dates_by_offset(dates, window_size, step_size, offset, rolling)
-
-  # Assuming select_dates_by_offset returns a data frame with columns: training_start, training_end, prediction_start, prediction_end
-  indices <- dplyr::bind_rows(
-    tibble::tibble(
-      training_start = indices$training_start[1],
-      training_end = indices$training_end[1],
-      prediction_start = indices$training_start[1],
-      prediction_end = indices$prediction_start[1],
-      prediction_phase = "IS"
-    ),
-    indices
+# Define ML configurations for testing
+ml_config_all <- list(
+  ols_pred = list(
+    pred_func = "ols_pred",
+    config = list()
+  ),
+  enet_pred = list(
+    pred_func = "enet_pred",
+    config1 = list(alpha = 0.5, lambda = 0.1),
+    config2 = list(alpha = 0.5, lambda = 0.5)
+  ),
+  xgb_pred = list(
+    pred_func = "xgb_pred",
+    config1 = list(nrounds = 1, max_depth = 3, eta = 0.3, objective = "reg:squarederror"),
+    config2 = list(nrounds = 1, max_depth = 3, eta = 0.1, objective = "reg:squarederror")
+  ),
+  rf_pred = list(
+    pred_func = "rf_pred",
+    config1 = list(num.trees = 10, mtry = 4),
+    config2 = list(num.trees = 5, mtry = 3)
+  ),
+  # svm_pred = list(
+  #   pred_func = "svm_pred",
+  #   config1 = list(kernel = "linear", cost = 1),
+  #   config2 = list(kernel = "radial", cost = 1)
+  # ),
+  nnet_pred = list(
+    pred_func = "nnet_pred",
+    config1 = list(size = 10, decay = 0.01),
+    config2 = list(size = 5, decay = 0.05)
   )
+)
 
-  if (verbose) {
-    cli::cli_inform("Subsetting data for return label and features...")
-  }
-  # Subset data to include only necessary columns
-  data_subset <- data %>%
-    dplyr::select(stock_id, date, dplyr::all_of(return_label), dplyr::all_of(features))
-
-  if (verbose) {
-    if (is.null(return_prediction_object)) {
-      cli::cli_inform("Initializing a new 'returnPrediction' object...")
-    } else {
-      cli::cli_inform("Appending to the existing 'returnPrediction' object...")
-    }
-  }
-
-  # Initialize or append to returnPrediction object
-  if (is.null(return_prediction_object)) {
-    return_prediction_object <- create_return_prediction(data_subset, return_label)
-    if (verbose) {
-      cli::cli_alert_success("Successfully created a new 'returnPrediction' object.")
-    }
-  } else {
-    if (verbose) {
-      cli::cli_alert_success("Successfully appended to the existing 'returnPrediction' object.")
-    }
-  }
-
-  if (verbose) {
-    cli::cli_inform("Creating prediction configuration...")
-  }
-  # Create prediction configuration
-  pred_config <- list(
+# Test for backtesting_returns with all models
+test_that("backtesting_returns executes correctly with multiple models", {
+  # Run backtesting_returns with all models
+  rp_all <- backtesting_returns(
+    data = test_data_ml,
+    return_prediction_object = NULL,
     return_label = return_label,
     features = features,
     rolling = rolling,
@@ -231,111 +66,163 @@ backtesting_returns <- function(data, return_prediction_object = NULL, return_la
     step_size = step_size,
     offset = offset,
     in_sample = in_sample,
-    indices = indices
+    ml_config = ml_config_all,
+    append = FALSE,
+    num_cores = 1L,  # Use single core for testing
+    verbose = TRUE  # Set to TRUE for detailed messages during testing
   )
 
-  if (verbose) {
-    cli::cli_inform("Setting up parallel processing...")
-  }
-  # Set up parallel processing
-  if (!is.null(num_cores)) {
-    future::plan(multicore, workers = num_cores)
-    options(future.seed = TRUE)
-    if (verbose) {
-      cli::cli_alert_info("Parallel processing enabled with {num_cores} cores.")
-    }
-  } else {
-    future::plan("sequential")
-    options(future.seed = TRUE)
-    if (verbose) {
-      cli::cli_alert_info("Sequential processing enabled.")
-    }
-  }
+  # Verify the returned object
+  expect_s3_class(rp_all, "returnPrediction")
+  expect_true(length(rp_all$models) == length(ml_config_all)*2-1)
 
-  if (verbose) {
-    cli::cli_inform("Starting model processing...")
-  }
+  # Verify predictions
+  expect_true(nrow(rp_all$predictions) > 0)
+  expect_true(all(c("stock_id", "date") %in% colnames(rp_all$predictions)))
+  # check summary
+  expect_true(all(colnames(summary(rp_all)) == c("MSE","RMSE","MAE","Hit_Ratio")))
+  # check summary rownames
+  expect_true(all(rownames(summary(rp_all)) == colnames(rp_all$predictions)[-c(1:2)]))
+})
 
-  # Loop through each model in ml_config
-  for (i in seq_along(ml_config)) {
-    model_name <- names(ml_config)[i]
-    model_specs <- ml_config[[i]]
+# Test for ols_pred function
+test_that("ols_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
 
-    # Validate presence of 'pred_func'
-    if (is.null(model_specs$pred_func)) {
-      cli::cli_abort("Model '{model_name}' does not have a 'pred_func' specified in 'ml_config'.")
-    }
+  predictions <- ols_pred(train_data_ex, test_data_ex, config = list(), fast = TRUE)
 
-    model_function <- model_specs$pred_func
-    config_names <- setdiff(names(model_specs), "pred_func")
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
 
-    if (length(config_names) == 0) {
-      cli::cli_alert_warning("Model '{model_name}' does not have any configurations. Skipping.")
-      next
-    }
+# Test for enet_pred function
+test_that("enet_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
 
-    cli::cli_alert_info("Processing model {i}/{length(ml_config)}: {model_name}")
+  predictions <- enet_pred(train_data_ex, test_data_ex, config = list(alpha = 0.5, lambda = 0.1))
 
-    # Loop through each configuration for the current model
-    for (j in seq_along(config_names)) {
-      config_name <- config_names[j]
-      model_config <- model_specs[[config_name]]
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
 
-      cli::cli_alert_info("  Processing configuration {j}/{length(config_names)}: {config_name}")
-      cli::cli_alert_info("    Using prediction function: {model_function}")
+# Test for xgb_pred function
+test_that("xgb_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
 
-      # Define mapping indices
-      map_indices <- seq_len(nrow(indices))
+  predictions <- xgb_pred(train_data_ex, test_data_ex, config = list(nrounds = 10, max_depth = 3, eta = 0.3, objective = "reg:squarederror"))
 
-      # Initialize progress bar
-      if (verbose) {
-        pb <- cli::cli_progress_bar("    Running predictions for {model_name} - {config_name}", total = length(map_indices), clear = FALSE, format = "{cli::pb_spin} {cli::pb_percent} [{cli::pb_bar}] {cli::pb_eta}")
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
+
+# Test for rf_pred function
+test_that("rf_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
+
+  predictions <- rf_pred(train_data_ex, test_data_ex, config = list(num.trees = 200, mtry = 4))
+
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
+
+# Test for svm_pred function
+test_that("svm_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
+
+  predictions <- svm_pred(train_data_ex, test_data_ex, config = list(kernel = "linear", cost = 1))
+
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
+
+# Test for nnet_pred function
+test_that("nnet_pred produces correct output structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
+
+  predictions <- nnet_pred(train_data_ex, test_data_ex, config = list(size = 10, decay = 0.01))
+
+  expect_s3_class(predictions,"tbl_df")
+  expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
+  expect_equal(nrow(predictions), nrow(test_data_ex))
+})
+
+caret_configs <- list(
+  # Configuration 1: glmnet with hyperparameter tuning
+  glmnet_tune = list(
+    method = "glmnet",
+    tuneGrid = expand.grid(alpha = seq(0, 1, by = 0.5), lambda = c(0.01, 0.1)),
+    trControl = trainControl(method = "cv", number = 5),
+    metric = "RMSE"
+  ),
+  # Configuration 2: Random Forest with hyperparameter tuning
+  rf_tune = list(
+    method = "rf",
+    tuneGrid = expand.grid(mtry = c(2, 4, 6)),
+    trControl = trainControl(method = "cv", number = 5),
+    metric = "RMSE"
+  ),
+  # Configuration 3: Support Vector Machine with hyperparameter tuning
+  svm_tune = list(
+    method = "svmRadial",
+    tuneGrid = expand.grid(C = c(0.5, 1, 2), sigma = c(0.01, 0.1)),
+    trControl = trainControl(method = "cv", number = 5),
+    metric = "RMSE"
+  ),
+  # Configuration 4: Linear Regression without hyperparameter tuning
+  lm_simple = list(
+    method = "lm",
+    trControl = trainControl(method = "none"),
+    metric = "RMSE"
+  )
+)
+
+# Begin testing
+test_that("caret_wrapper trains models without errors and returns correct structure", {
+  # Split the test data into training and testing sets
+  train_data_ex <- test_data_ml[1:150, c("stock_id", "date", return_label, features)]
+  test_data_ex <- test_data_ml[151:200, c("stock_id", "date", features)]
+  for (config_name in names(caret_configs)) {
+    config <- caret_configs[[config_name]]
+    # Capture verbose output
+    predictions <- tryCatch(
+      caret_wrapper(
+        train_data = train_data_ex,
+        test_data = test_data_ex,
+        config = config,
+        verbose = FALSE
+      ),
+      error = function(e) {
+        fail(paste("caret_wrapper failed for configuration:", config_name, "Error:", e$message))
       }
+    )
 
-      # Execute predictions with progress updates
-      back_test <- furrr::future_map_dfr(
-        map_indices,
-        ~ {
-          result <- retpred_map(.x, data_subset, indices, model_function, model_config)
-          if (verbose) {
-            cli::cli_progress_update(id = pb)
-          }
-          return(result)
-        },
-        .options = furrr::furrr_options(seed = TRUE)
-      ) %>%
-        dplyr::rename(prediction = pred_return)
+    # Check that predictions is a tibble
+    expect_s3_class(predictions, "tbl_df")
 
-      # Finish progress bar
-      if (verbose) {
-        cli::cli_progress_done(id = pb)
-      }
+    # Check for required columns
+    expect_true(all(c("stock_id", "date", "pred_return") %in% colnames(predictions)))
 
-      # Append predictions to returnPrediction object
-      model_config_plus <- model_config
-      model_config_plus[["pred_config"]] <- pred_config
+    # Check the number of predictions matches the test data
+    expect_equal(nrow(predictions), nrow(test_data_ex))
 
-      return_prediction_object <- add_model_prediction(return_prediction_object, model_function, model_config_plus, back_test)
-
-      if (verbose) {
-        cli::cli_alert_success("    Successfully added predictions for configuration '{config_name}' of model '{model_name}'.")
-      }
-    }
+    # Check that pred_return is numeric
+    expect_type(predictions$pred_return, "double")
   }
-
-  if (verbose) {
-    cli::cli_alert_success("Completed all model processing.")
-  }
-
-  # Reset parallel processing to sequential
-  future::plan("sequential")
-  if (verbose) {
-    cli::cli_alert_info("Parallel processing plan reset to sequential.")
-  }
-
-  if (verbose) {
-    cli::cli_inform("Returning the 'returnPrediction' object.")
-  }
-
-  return(return_prediction_object)
-}
+})
