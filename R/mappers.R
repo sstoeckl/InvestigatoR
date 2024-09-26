@@ -16,7 +16,7 @@
 #' @export
 retpred_map <- function(t, data_subset, indices, model_function, model_config){
   # Input Validation using checkmate
-  checkmate::assert_integer(t, lower = 1, upper = nrow(indices), len = 1, .var.name = "t")
+  checkmate::assert_numeric(t, lower = 1, upper = nrow(indices), len = 1, .var.name = "t")
   checkmate::assert_string(model_function, .var.name = "model_function")
   checkmate::assert_list(model_config, .var.name = "model_config")
 
