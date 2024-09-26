@@ -7,18 +7,18 @@
 retpred_map(t, data_subset, indices, model_function, model_config)
 }
 \arguments{
-\item{t}{integer, index of the current iteration}
+\item{t}{Integer. Index of the current iteration.}
 
-\item{data_subset}{tibble, subset of the data (stock_id, date, return_label, features)}
+\item{data_subset}{Tibble. Subset of the data containing \code{stock_id}, \code{date}, \code{return_label}, and features.}
 
-\item{indices}{list, list of training and prediction indices}
+\item{indices}{Tibble. Contains \code{training_start}, \code{training_end}, \code{prediction_start}, and \code{prediction_end} dates.}
 
-\item{model_function}{character, name of the prediction (model) function}
+\item{model_function}{Character. Name of the prediction (model) function to be invoked.}
 
-\item{model_config}{list, configuration for the model}
+\item{model_config}{List. Configuration parameters for the model function.}
 }
 \value{
-tibble that contains stock id, date, and predicted return
+Tibble containing \code{stock_id}, \code{date}, and \code{pred_return}.
 }
 \description{
 Return Prediction Mapping Function (Helper)
