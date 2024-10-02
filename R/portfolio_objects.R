@@ -63,7 +63,14 @@ create_return_prediction <- function(data, label) {
 #'
 #' @examples
 #' \dontrun{
-#' # Assuming 'return_prediction' has been initialized and contains actual returns
+#' # Initialize the returnPrediction object
+#' data <- tibble::tibble(
+#'   stock_id = 1:100,
+#'   date = seq.Date(Sys.Date(), by = "day", length.out = 100),
+#'   return_label = runif(100)
+#' )
+#' # Create the returnPrediction object
+#' rp <- create_return_prediction(data, "return_label")
 #' # Sample new prediction data
 #' new_predictions <- tibble::tibble(
 #'   stock_id = 1:100,
@@ -116,6 +123,116 @@ add_model_prediction <- function(return_prediction, model_function, config, new_
 
   return(return_prediction)
 }
+
+# R/add_extra_data.R
+
+#' Add Extra Data to returnPrediction S3 Object
+#'
+#' This function allows users to add supplementary datasets to an existing `returnPrediction` object. The extra data can include any relevant information, but must have the same `stock_id` and `date` combinations as the existing data in the object.
+#'
+#' @param return_prediction_object An object of class `returnPrediction`.
+#' @param extra_data A tibble or data.frame containing additional data to be added. Must include `stock_id` and `date` columns and match the dimensions of the existing data.
+#' @param new_data_name A character string specifying the name under which the extra data will be stored within the `returnPrediction` object.
+#'
+#' @return An updated `returnPrediction` object with the added extra data.
+#'
+#' @examples
+#' \dontrun{
+#' # Initialize the returnPrediction object
+#' data <- tibble::tibble(
+#'   stock_id = 1:100,
+#'   date = seq.Date(Sys.Date(), by = "day", length.out = 100),
+#'   return_label = runif(100)
+#' )
+#' # Create the returnPrediction object
+#' rp <- create_return_prediction(data, "return_label")
+#'
+#' # Add extra data regarding weights.
+#' extra_data <- tibble::tibble(
+#'   stock_id = 1:100,
+#'    date = seq.Date(Sys.Date(), by = "day", length.out = 100),
+#'   sector = sample(c("Technology", "Healthcare", "Finance"), 100, replace = TRUE),
+#'   country = sample(c("USA", "Germany", "Japan"), 100, replace = TRUE)
+#' )
+# Add extra data to returnPrediction object
+#' rp <- add_extra_data(rp, extra_data, new_data_name = "sector_info")
+#'
+#' # View the added extra data
+#' print(rp$extra_data$sector_info)
+#' }
+#'
+#' @importFrom dplyr select left_join
+#' @importFrom tibble tibble
+#' @importFrom cli cli_alert_info cli_alert_success cli_alert_warning cli_alert_danger
+#' @export
+add_extra_data <- function(return_prediction_object, extra_data, new_data_name = "extra_data") {
+  # Input validation
+  if (!inherits(return_prediction_object, "returnPrediction")) {
+    cli::cli_alert_danger("`return_prediction_object` must be of class 'returnPrediction'.")
+    stop("`return_prediction_object` must be of class 'returnPrediction'.")
+  }
+
+  if (!is.data.frame(extra_data)) {
+    cli::cli_alert_danger("`extra_data` must be a tibble or data.frame.")
+    stop("`extra_data` must be a tibble or data.frame.")
+  }
+
+  required_cols <- c("stock_id", "date")
+  missing_cols <- setdiff(required_cols, names(extra_data))
+  if (length(missing_cols) > 0) {
+    cli::cli_alert_danger("`extra_data` is missing required columns: {paste(missing_cols, collapse = ', ')}.")
+    stop("`extra_data` must contain 'stock_id' and 'date' columns.")
+  }
+
+  # Check if the dimensions of extra_data match the dimensions of existing data
+  if (!all(nrow(extra_data) == nrow(return_prediction_object$predictions))) {
+    cli::cli_alert_danger("The dimensions of `extra_data` do not match the existing data in the returnPrediction object.")
+    stop("Dimensions mismatch: Ensure `extra_data` has the same number of rows as the existing data in `returnPrediction`.")
+  }
+
+  # Check that the stock_id and date combinations are consistent
+  key_cols <- c("stock_id", "date")
+  existing_keys <- return_prediction_object$predictions %>%
+    dplyr::select(dplyr::all_of(key_cols))
+
+  new_keys <- extra_data %>%
+    dplyr::select(dplyr::all_of(key_cols))
+
+  if (!identical(existing_keys, new_keys)) {
+    cli::cli_alert_danger("The `stock_id` and `date` combinations in `extra_data` do not match the existing data.")
+    stop("Mismatch in `stock_id` and `date` combinations.")
+  }
+
+  # Initialize 'extra_data' list if it doesn't exist
+  if (is.null(return_prediction_object$extra_data)) {
+    return_prediction_object$extra_data <- list()
+  }
+
+  # If extra data already exists for the new_data_name, perform left join
+  if (new_data_name %in% names(return_prediction_object$extra_data)) {
+    cli::cli_alert_info("Existing extra data for '{new_data_name}' found. Performing a left join.")
+
+    existing_data <- return_prediction_object$extra_data[[new_data_name]]
+
+    # Perform a left join, handling column name conflicts
+    overlapping_cols <- intersect(names(existing_data), names(extra_data))[-(1:2)]  # Exclude stock_id and date
+    if (length(overlapping_cols) > 0) {
+      cli::cli_alert_warning("Overwriting existing columns: {paste(overlapping_cols, collapse = ', ')} in the extra data.")
+      extra_data <- extra_data %>% dplyr::select(-dplyr::all_of(overlapping_cols))  # Remove overlapping columns from new data
+    }
+
+    return_prediction_object$extra_data[[new_data_name]] <- dplyr::left_join(existing_data, extra_data, by = key_cols)
+
+    cli::cli_alert_success("Successfully merged new data with existing extra data under '{new_data_name}'.")
+  } else {
+    # Add the new extra data
+    return_prediction_object$extra_data[[new_data_name]] <- extra_data
+    cli::cli_alert_success("Extra data '{new_data_name}' has been successfully added to the returnPrediction object.")
+  }
+
+  return(return_prediction_object)
+}
+
 # check.returnPrediction <- function(object,all=TRUE) {
 #   required_fields <- c("models", "predictions", "actual_returns", "errors")
 #
@@ -367,18 +484,4 @@ plot.portfolioReturns <- function(portfolio_object, type = NULL) {
     plot_func(xts_data)
   }
 }
-# library(cowplot)   # Plot grid management
-# g1 <- tibble(date = t_oos,
-#              benchmark = cumprod(1+portf_returns[,1]),
-#              ml_based = cumprod(1+portf_returns[,2])) %>%
-#   gather(key = strat, value = value, -date) %>%
-#   ggplot(aes(x = date, y = value, color = strat)) + geom_line() +theme_grey()
-# g2 <- tibble(year = lubridate::year(t_oos),
-#              benchmark = portf_returns[,1],
-#              ml_based = portf_returns[,2]) %>%
-#   gather(key = strat, value = value, -year) %>%
-#   group_by(year, strat) %>%
-#   summarise(avg_return = mean(value)) %>%
-#   ggplot(aes(x = year, y = avg_return, fill = strat)) +
-#   geom_col(position = "dodge") + theme_grey()
-# plot_grid(g1,g2, nrow = 2)
+

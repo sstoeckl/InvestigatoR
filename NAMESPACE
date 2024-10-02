@@ -3,6 +3,7 @@
 S3method(plot,portfolioReturns)
 S3method(summary,portfolioReturns)
 S3method(summary,returnPrediction)
+export(add_extra_data)
 export(add_model_prediction)
 export(add_weight_model)
 export(backtesting_portfolios)

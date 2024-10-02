@@ -28,7 +28,14 @@ Add model prediction to returnPrediction S3 object
 }
 \examples{
 \dontrun{
-# Assuming 'return_prediction' has been initialized and contains actual returns
+# Initialize the returnPrediction object
+data <- tibble::tibble(
+  stock_id = 1:100,
+  date = seq.Date(Sys.Date(), by = "day", length.out = 100),
+  return_label = runif(100)
+)
+# Create the returnPrediction object
+rp <- create_return_prediction(data, "return_label")
 # Sample new prediction data
 new_predictions <- tibble::tibble(
   stock_id = 1:100,

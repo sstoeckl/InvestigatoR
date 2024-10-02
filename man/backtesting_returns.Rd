@@ -63,8 +63,8 @@ data_subset <- data_ml |>  filter(stock_id<=30)
 return_label <- "R1M_Usd"
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
 rolling <- TRUE
-window_size <- "5 years"
-step_size <- "3 months"
+window_size <- "10 years"
+step_size <- "10 years"
 offset <- "1 year"
 in_sample <- TRUE
 ml_config <- list(
