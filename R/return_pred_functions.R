@@ -639,7 +639,7 @@ caret_wrapper <- function(train_data, test_data, config = list()) {
   cli::cli_alert_info("Training the model using method: {config$method}")
 
   model <- tryCatch(
-    caret::train(
+    suppressWarnings(caret::train(
       x = as.matrix(train_features),
       y = as.numeric(train_label_vector),
       method = config$method,
@@ -647,7 +647,7 @@ caret_wrapper <- function(train_data, test_data, config = list()) {
       trControl = config$trControl,
       metric = if (!is.null(config$metric)) config$metric else "RMSE",
       preProcess = if (!is.null(config$preProcess)) config$preProcess else NULL
-    ),
+    )),
     error = function(e) {
       cli::cli_abort("Error during caret model training: {e$message}")
     }
