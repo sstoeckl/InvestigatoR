@@ -295,122 +295,109 @@ summary.returnPrediction <- function(return_prediction_object, benchmark = NULL)
   rownames(results_df) <- names(return_prediction_object$predictions)[-c(1,2)]
   results_df
 }
-#
-#
-# plot.returnPrediction <- function(object, ...) {
-#   # Example: Plotting predictions vs. errors
-#   plot(object$predictions, object$prediction_errors, ...)
-# }
+
 #' Create portfolioReturns S3 object
 #'
-#' @param data Data frame containing stock_id, date, and the specified label column
-#' @param label Column name of the label column
+#' @param data Data frame containing stock_id, date, and the specified return label.
+#' @param label Column name of the actual return.
 #'
-#' @return A portfolioReturns S3 object
-#'
+#' @return A portfolioReturns S3 object.
 #' @importFrom dplyr select distinct
 #' @importFrom tibble tibble
-#'
 #' @export
-#'
 #' @examples
 #' data <- tibble::tibble(
 #'   stock_id = 1:100,
-#'   date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)),
+#'   date = rep(Sys.Date(), 100),
 #'   return_label = runif(100)
 #' )
-#' # Create the portfolioReturns object
 #' pf <- create_portfolios(data, "return_label")
-#' # Check the initial setup
 #' print(pf)
 create_portfolios <- function(data, label) {
-  # Validate the input data contains necessary columns
+  # Validate input data
   if (!("stock_id" %in% names(data)) || !("date" %in% names(data)) || !(label %in% names(data))) {
     stop("Data must contain 'stock_id', 'date', and the specified label column.")
   }
 
-  # Prepare the tibbles
-  weights <- data %>%
-    dplyr::select(stock_id, date)
-
+  # Prepare actual returns
   actual_returns <- data %>%
-    dplyr::select(stock_id, date, actual_return=!!rlang::sym(label))  # Ensure actual returns are included
+    dplyr::select(stock_id, date, actual_return = !!rlang::sym(label))
 
-  portfolio_returns <- data %>%
-    dplyr::distinct(date)
+  # Create empty structures for portfolio results and models
+  weights <- data %>% dplyr::select(stock_id, date)
+  portfolio_returns <- data %>% dplyr::distinct(date)
 
-  # Bundle into a list with the class 'portfolioReturns'
+  # Bundle into a list with class 'portfolioReturns'
   structure(list(
-    weight_models = list(),
+    models = list(),
     weights = weights,
     actual_returns = actual_returns,
     portfolio_returns = portfolio_returns
   ), class = "portfolioReturns")
 }
 
-#' Add a new weight model to the portfolioReturns S3 object
+#' Add weight model and predictions to portfolioReturns S3 object
 #'
-#' @param portfolio_object A portfolioReturns object
-#' @param weight_model Config/Model of the weight model
-#' @param weight_config Configuration of the weight model
-#' @param new_weights Data frame containing stock_id, date, and the new weights
+#' @param portfolio_object A portfolioReturns object.
+#' @param model_name Name of the weight prediction model.
+#' @param weight_config Configuration for the model.
+#' @param new_weights Data frame containing stock_id, date, and the new weights.
 #'
-#' @return A portfolioReturns S3 object with the new weight model added
-#'
+#' @return Updated portfolioReturns S3 object with added weight model and performance data.
 #' @importFrom dplyr select distinct bind_rows left_join arrange
-#'
 #' @export
-#'
 #' @examples
 #' \dontrun{
-#' # Assuming 'pf' is your portfolio_object already created
-#' weight_function <- "ensemble"  # Example model function
-#' weight_config <- list(ensemble_list=c("ols_1","xgb_1","xgb_2"), ensemble_weights=c(0.3,0.3,0.4))
-#' new_weights <- data.frame(stock_id = 1:100, date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)), weights = runif(100))
-#' # Add the new model and its weights to the portfolio
-#' pf <- add_weight_model(pf, weight_function, weight_config, new_weights)
+#' data <- tibble::tibble(
+#'   stock_id = 1:100,
+#'   date = rep(Sys.Date(), 100),
+#'   returns=runif(100),
+#'   weights = runif(100)
+#' )
+#' return_label <- "returns"
+#' pf <- create_portfolios(data, return_label)
+#' pf <- add_weight_model(pf, "keras_weights", list(epochs = 50), data |> select(-returns))
 #' print(pf)
 #' }
-add_weight_model <- function(portfolio_object, weight_model, weight_config, new_weights) {
+
+add_weight_model <- function(portfolio_object, model_name, weight_config, new_weights) {
   # Check that new_weights contains the necessary columns
   if (!("stock_id" %in% names(new_weights)) || !("date" %in% names(new_weights))) {
     stop("new_weights must contain 'stock_id' and 'date' columns.")
   }
 
   # Generate a unique identifier for the new weight model
-  model_name <- weight_model
-  existing_ids <- names(portfolio_object$weights)
-  counter <- find_largest_number(strings = existing_ids, paste0(names(new_weights)[3],"_",model_name)) +1
-  model_id <- paste0(names(new_weights)[3], "_", model_name, "_", counter)
+  existing_ids <- names(portfolio_object$weights)[-c(1, 2)]  # Skip stock_id and date columns
+  model_id <- paste0(model_name, "_", length(existing_ids) + 1)
 
   # Add model details
-  portfolio_object$weight_models[[model_id]] <- list(
-    function_name = weight_model,
-    config = weight_config,  # Assuming config can be derived from the function environment
+  portfolio_object$models[[model_id]] <- list(
+    model_name = model_name,
+    config = weight_config,
     datetime = Sys.time()
   )
-  # Prepare new_predictions by renaming the prediction column to the model identifier
-  names(new_weights)[3] <- model_id
 
-  # Join new weights with existing weights
-  portfolio_object$weights <- portfolio_object$weights |>
+  # Prepare new weights and join with existing weights
+  names(new_weights)[3] <- model_id
+  portfolio_object$weights <- portfolio_object$weights %>%
     dplyr::left_join(new_weights, by = c("stock_id", "date"))
 
-  # Update portfolio returns
-  new_portfolio_returns <- portfolio_object$weights |>
-    dplyr::select(stock_id, date, weights=!!model_id) |>
-    dplyr::left_join(portfolio_object$actual_returns, by = c("stock_id", "date")) |>
-    dplyr::group_by(date) |>
-    dplyr::summarise(portfolio_return = sum(actual_return*weights)) |>
+  # Calculate portfolio returns for the new model
+  new_portfolio_returns <- portfolio_object$weights %>%
+    dplyr::select(stock_id, date, weights = !!model_id) %>%
+    dplyr::left_join(portfolio_object$actual_returns, by = c("stock_id", "date")) %>%
+    dplyr::group_by(date) %>%
+    dplyr::summarise(portfolio_return = sum(actual_return * weights, na.rm = TRUE)) %>%
     dplyr::arrange(date)
-      # portfolio_return = weighted.mean(actual_returns, weights))
 
-  names(new_portfolio_returns)[names(new_portfolio_returns) == "portfolio_return"] <- model_id
+  names(new_portfolio_returns)[2] <- model_id
   portfolio_object$portfolio_returns <- portfolio_object$portfolio_returns %>%
     dplyr::left_join(new_portfolio_returns, by = "date")
 
   return(portfolio_object)
 }
+
+
 #' Define the summary method for 'portfolioReturns' class
 #'
 #' @param portfolio_object A portfolioReturns object

@@ -5,7 +5,7 @@
 #' @param pf_config a list of configurations for the portfolio
 #' @param append boolean, whether to append the portfolio to the portfolio object
 #'
-#' @return a portfolio object suitable for furtehr processing with summary or plot
+#' @return An S3 object of class `portfolioReturns` containing the predicted weights information on the portfolio configuration.
 #'
 #' @importFrom dplyr select all_of arrange group_by mutate ungroup
 #'

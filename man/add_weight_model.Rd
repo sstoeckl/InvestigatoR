@@ -2,33 +2,34 @@
 % Please edit documentation in R/portfolio_objects.R
 \name{add_weight_model}
 \alias{add_weight_model}
-\title{Add a new weight model to the portfolioReturns S3 object}
+\title{Add weight model and predictions to portfolioReturns S3 object}
 \usage{
-add_weight_model(portfolio_object, weight_model, weight_config, new_weights)
+add_weight_model(portfolio_object, model_name, weight_config, new_weights)
 }
 \arguments{
-\item{portfolio_object}{A portfolioReturns object}
+\item{portfolio_object}{A portfolioReturns object.}
 
-\item{weight_model}{Config/Model of the weight model}
+\item{model_name}{Name of the weight prediction model.}
 
-\item{weight_config}{Configuration of the weight model}
+\item{weight_config}{Configuration for the model.}
 
-\item{new_weights}{Data frame containing stock_id, date, and the new weights}
+\item{new_weights}{Data frame containing stock_id, date, and the new weights.}
 }
 \value{
-A portfolioReturns S3 object with the new weight model added
+Updated portfolioReturns S3 object with added weight model and performance data.
 }
 \description{
-Add a new weight model to the portfolioReturns S3 object
+Add weight model and predictions to portfolioReturns S3 object
 }
 \examples{
 \dontrun{
-# Assuming 'pf' is your portfolio_object already created
-weight_function <- "ensemble"  # Example model function
-weight_config <- list(ensemble_list=c("ols_1","xgb_1","xgb_2"), ensemble_weights=c(0.3,0.3,0.4))
-new_weights <- data.frame(stock_id = 1:100, date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)), weights = runif(100))
-# Add the new model and its weights to the portfolio
-pf <- add_weight_model(pf, weight_function, weight_config, new_weights)
+data <- tibble::tibble(
+  stock_id = 1:100,
+  date = rep(Sys.Date(), 100),
+  weights = runif(100)
+)
+pf <- create_portfolios(data, "return_label")
+pf <- add_weight_model(pf, "keras_weights", list(epochs = 50), data)
 print(pf)
 }
 }

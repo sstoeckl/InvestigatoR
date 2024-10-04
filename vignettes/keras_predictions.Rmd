@@ -1,0 +1,516 @@
+---
+title: "Neural Network Predictions and Backtesting using Keras"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{keras_predictions}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction
+
+This vignette demonstrates how to use Keras neural networks via the `keras_pred` function within the **InvestigatoR** package to perform return predictions, integrate those predictions into backtesting workflows, and create portfolios. The neural networks will be trained using **Keras** through R's **reticulate** package, allowing seamless Python integration.
+
+## 1. Setting up Python Environment for Keras
+
+To use Keras and TensorFlow within R, you'll need to set up the appropriate Python environment. You can use either a virtual environment or a conda environment.
+
+### 1.1 Using Virtual Environment
+
+```{r, eval=FALSE}
+# Load reticulate
+library(reticulate)
+
+# Create a virtual environment and install necessary packages
+reticulate::virtualenv_create(envname = "r-reticulate", packages = c("tensorflow", "keras"))
+
+# Use the virtual environment
+use_virtualenv("r-reticulate")
+```
+
+### 1.2 Using Conda Environment
+
+```{r, eval=FALSE}
+# Create a Conda environment and install necessary packages
+reticulate::conda_create(envname = "r-conda", packages = c("tensorflow", "keras"))
+
+# Use the conda environment
+use_condaenv("r-conda")
+```
+
+With Keras and TensorFlow installed, you're ready to proceed with using neural networks for return prediction.
+
+---
+
+## 2. Creating Neural Networks with `keras_pred`
+
+The `keras_pred` function in **InvestigatoR** enables you to create and use neural networks (via Keras) for return prediction. Below, we define different neural networks that can be used with `keras_pred`.
+
+### 2.1 Example 1: Basic Neural Network with `keras_pred`
+
+Here’s how to define and use a basic neural network for return prediction.
+
+```{r}
+library(reticulate)
+library(tensorflow)
+library(keras)
+library(reticulate)
+library(tensorflow)
+reticulate::use_virtualenv("C:/R/python/")
+# check for python availability and whether modules are installed
+reticulate::py_config()  
+reticulate::py_module_available("tensorflow")
+reticulate::py_module_available("keras")
+# load data and specify prediction settings
+data("data_ml")
+return_label <- "R1M_Usd"
+features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+rolling <- FALSE; window_size= "5 years"; step_size = "1 months"; offset = "1 month"; in_sample = TRUE
+
+# Define a basic configuration for keras_pred
+ml_config <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 32, activation = "relu"),
+        list(type = "dense", units = 16, activation = "relu"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = "mean_squared_error",
+      optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+      epochs = 10,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      plot_training = TRUE
+    )
+  )
+)
+
+# Backtest the return prediction using keras_pred
+rp <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp)
+```
+
+### 2.2 Example 2: Neural Network with Dropout and Regularization
+
+You can further customize the network by adding dropout layers and L2 kernel regularization to avoid overfitting:
+
+```{r}
+ml_config_dropout <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 128, activation = "relu", kernel_regularizer = regularizer_l2(0.01)),
+        list(type = "dropout", rate = 0.5),
+        list(type = "dense", units = 64, activation = "relu", kernel_regularizer = regularizer_l2(0.01)),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = "mean_squared_error",
+      optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+      epochs = 50,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      callbacks = list(
+        callback_early_stopping(monitor = "loss", patience = 3)
+      ),
+      plot_training = TRUE
+    )
+  )
+)
+
+# Backtest with dropout and regularization
+rp_dropout <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_dropout,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_dropout)
+```
+
+### 2.3 Example 3: Advanced Neural Network with Custom Initializers and Callbacks
+
+Now we define a more advanced configuration with custom initializers, batch normalization, and additional callbacks like early stopping.
+
+```{r}
+ml_config_advanced <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 128, activation = "relu", kernel_initializer = "he_normal"),
+        list(type = "batch_normalization"),
+        list(type = "dropout", rate = 0.5),
+        list(type = "dense", units = 64, activation = "relu", kernel_initializer = "he_normal"),
+        list(type = "batch_normalization"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = "mean_squared_error",
+      optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.0001),
+      epochs = 100,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      callbacks = list(
+        callback_early_stopping(monitor = "loss", patience = 10),
+        callback_reduce_lr_on_plateau(monitor = "loss", factor = 0.1, patience = 3)
+      ),
+      plot_training = TRUE
+    )
+  )
+)
+
+# Backtest with advanced neural network
+rp_advanced <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_advanced,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_advanced)
+```
+
+## 3. Custom Loss Functions in Keras
+
+In this chapter, we will explore how to define custom loss functions for Keras models. Keras offers a variety of pre-built loss functions, but we can define our own custom losses using different methods, such as programming directly in Keras, TensorFlow, or native R.
+
+### 3.1 Example 1: Mean Squared Error (MSE) in Keras
+
+The most straightforward way to use MSE in Keras is by directly specifying it as the loss function using the built-in Keras methods.
+
+```{r keras_mse_loss}
+# Define custom MSE loss function using Keras
+custom_keras_loss <- function(y_true, y_pred) {
+  # Use Keras backend to compute mean of squared differences
+  k_mean(k_square(y_pred - y_true))
+}
+
+ml_config_custom_mse_keras <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 32, activation = "relu"),
+        list(type = "dense", units = 16, activation = "relu"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = custom_keras_loss,  # Custom loss function
+      optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+      epochs = 10,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      plot_training = TRUE
+    )
+  )
+)
+
+# Run model with Keras MSE loss
+rp_keras_mse <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_custom_mse_keras,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_keras_mse)
+```
+
+### Example 2: Mean Squared Error (MSE) in TensorFlow
+
+Here, we define the MSE loss function using the TensorFlow backend. This gives you more control over the computation and allows for more advanced operations if needed.
+
+```{r tensorflow_mse_loss}
+# Define the MSE loss function using TensorFlow
+custom_tf_loss <- function(y_true, y_pred) {
+  tf$reduce_mean(tf$square(y_pred - y_true))
+}
+
+ml_config_custom_mse_tf <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 32, activation = "relu"),
+        list(type = "dense", units = 16, activation = "relu"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = custom_tf_loss,  # Custom loss function
+      optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+      epochs = 10,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      plot_training = TRUE
+    )
+  )
+)
+
+# Run model with Keras MSE loss
+rp_tf_mse <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_custom_mse_tf,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_tf_mse)
+```
+
+### Example 3: Mean Squared Error (MSE) in Native R
+
+You can also define the MSE loss function natively in R, which provides flexibility if you're more comfortable with R's syntax but is also markedly slower than using TensorFlow or Keras.
+
+```{r native_r_mse_loss}
+# Define MSE loss in native R
+r_mse <- function(y_true, y_pred) {
+  mean((y_true - y_pred)^2)
+}
+
+ml_config_custom_mse_r <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 32, activation = "relu"),
+        list(type = "dense", units = 16, activation = "relu"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = r_mse,  # Custom loss function
+      optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+      epochs = 10,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      plot_training = TRUE
+    )
+  )
+)
+
+# Run model with Keras MSE loss
+rp_r_mse <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_custom_mse_r,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_r_mse)
+```
+
+### Example 4: Custom Loss Function
+
+Now, we define a more complex custom loss function. This custom loss involves computing both the MSE and a correlation-based term between the predicted and true values.
+
+```{r custom_loss_function}
+# Define custom loss function with custom metric
+custom_loss <- function(y_true, y_pred) {
+  k_mean((y_pred - k_mean(y_pred)) * (y_pred - k_mean(y_pred))) -
+    5 * k_mean((y_true - k_mean(y_true)) * (y_pred - k_mean(y_pred)))
+}
+
+ml_config_custom_loss <- list(
+  keras_pred = list(
+    pred_func = "keras_pred",
+    config = list(
+      layers = list(
+        list(type = "dense", units = 32, activation = "relu"),
+        list(type = "dense", units = 16, activation = "relu"),
+        list(type = "dense", units = 1, activation = "linear")
+      ),
+      loss = custom_loss,  # Custom loss function
+      optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+      epochs = 10,
+      batch_size = 128,
+      verbose = 0,
+      seed = 3,
+      plot_training = TRUE
+    )
+  )
+)
+
+# Run model with custom loss
+rp_custom_loss <- backtesting_returns(
+  data = data_ml |>  filter(date<="2012-12-31", stock_id<=20),
+  return_label = "R1M_Usd",
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"),
+  ml_config = ml_config_custom_loss,
+  rolling = FALSE,
+  window_size = "5 years",
+  step_size = "1 year",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE,
+  verbose=TRUE
+)
+summary(rp_custom_loss)
+```
+
+In this example, we defined a custom loss function that computes the mean squared error between the predicted and actual returns, as well as a custom correlation-based penalty term.
+
+---
+
+## Summary
+
+We have explored four different ways to define custom loss functions:
+
+1. **MSE using Keras' built-in methods**
+2. **MSE using TensorFlow operations**
+3. **MSE defined in native R**
+4. **A custom loss function with a correlation-based penalty term**
+
+These custom loss functions can be easily integrated into your backtesting workflow using the `keras_pred` function in **InvestigatoR**. After experimenting with these custom losses, you can proceed to the final backtesting step, where we apply these models to actual data for portfolio formation and evaluation.
+```
+
+### Explanation of Custom Losses:
+1. **MSE in Keras:** This uses the built-in `mean_squared_error` provided by Keras for simplicity and performance.
+2. **MSE in TensorFlow:** Here, we define MSE using TensorFlow's operations, giving us more control over how the loss is computed.
+3. **MSE in Native R:** We define MSE as an R function, allowing for custom modifications using R's native syntax.
+4. **Custom Loss:** This loss function combines MSE with a penalty term that incorporates the correlation between predicted and actual returns, useful for custom financial applications.
+
+This chapter will give users flexibility in how they define loss functions, allowing them to experiment with different approaches to model training and backtesting using **InvestigatoR**.
+
+---
+
+## 3. Backtesting Return Predictions Using `keras_pred`
+
+Now that we've defined different neural network configurations, let's backtest multiple models using the `backtesting_returns()` function.
+
+```{r}
+# Perform backtesting with multiple neural network configurations
+ml_config_all <- list(
+  basic_nn = ml_config$keras_pred,
+  dropout_nn = ml_config_dropout$keras_pred,
+  advanced_nn = ml_config_advanced$keras_pred
+)
+
+rp_all <- backtesting_returns(
+  data = data_ml,
+  return_label = "R1M_Usd",
+  features = features,
+  ml_config = ml_config_all,
+  rolling = TRUE,
+  window_size = "5 years",
+  step_size = "1 month",
+  offset = "1 year",
+  in_sample = TRUE,
+  append = FALSE
+)
+
+# View summary of backtested predictions
+summary(rp_all)
+```
+
+---
+
+## 4. Creating Portfolios Based on Keras Predictions
+
+Once we have the return predictions from the neural networks, we can create portfolios and evaluate their performance.
+
+### 4.1 Portfolio Backtesting with Quantile Weights
+
+We will create portfolios using a quantile-based weighting system based on the predictions generated from the neural networks.
+
+```{r}
+# Define portfolio configuration
+pf_config <- list(
+  predictions = c("basic_nn", "dropout_nn", "advanced_nn"),
+  quantile_weight = list(
+    pred_func = "quantile_weights",
+    config1 = list(quantiles = list(long = 0.20, short = 0.20), allow_short_sale = FALSE, min_weight = 0, max_weight = 1)
+  )
+)
+
+# Backtest portfolio performance
+pf <- backtesting_portfolios(return_prediction_object = rp_all, pf_config = pf_config)
+
+# View summary of portfolio performance
+summary(pf)
+```
+
+### 4.2 Plotting Portfolio Performance
+
+You can visualize the portfolio’s cumulative returns using the built-in plot function:
+
+```{r}
+# Plot cumulative returns of the portfolio
+plot(p
+
+f)
+```
+
+---
+
+## Conclusion
+
+In this vignette, we have demonstrated how to:
+
+1.
+
+---
+
+## Conclusion
+
+In this vignette, we have demonstrated how to:
+
+1. Set up Python environments to use Keras for neural network-based return prediction.
+2. Implement neural networks of varying complexity using the `keras_pred` function in **InvestigatoR**.
+3. Perform return prediction backtesting using `backtesting_returns()`.
+4. Create portfolios based on predictions and evaluate their performance.
+
+This workflow shows how to integrate machine learning models (specifically neural networks) into financial backtesting pipelines with **InvestigatoR**, allowing users to optimize returns and manage risks more effectively.

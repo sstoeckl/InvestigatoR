@@ -21,7 +21,7 @@ backtesting_portfolios(
 \item{append}{boolean, whether to append the portfolio to the portfolio object}
 }
 \value{
-a portfolio object suitable for furtehr processing with summary or plot
+An S3 object of class \code{portfolioReturns} containing the predicted weights information on the portfolio configuration.
 }
 \description{
 This function is for backtesting portfolios given return predictions

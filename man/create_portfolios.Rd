@@ -7,12 +7,12 @@
 create_portfolios(data, label)
 }
 \arguments{
-\item{data}{Data frame containing stock_id, date, and the specified label column}
+\item{data}{Data frame containing stock_id, date, and the specified return label.}
 
-\item{label}{Column name of the label column}
+\item{label}{Column name of the actual return.}
 }
 \value{
-A portfolioReturns S3 object
+A portfolioReturns S3 object.
 }
 \description{
 Create portfolioReturns S3 object
@@ -20,11 +20,9 @@ Create portfolioReturns S3 object
 \examples{
 data <- tibble::tibble(
   stock_id = 1:100,
-  date = c(rep(Sys.Date(), 50), rep(Sys.Date() + 1, 50)),
+  date = rep(Sys.Date(), 100),
   return_label = runif(100)
 )
-# Create the portfolioReturns object
 pf <- create_portfolios(data, "return_label")
-# Check the initial setup
 print(pf)
 }
