@@ -95,3 +95,46 @@ test_that("keras_weights works with custom Sharpe ratio loss function", {
   expect_true(all(weights$pred_weight >= min_weight))
   expect_true(all(weights$pred_weight <= max_weight))
 })
+
+# Unit Test for postprocess_weights
+test_that("postprocess_weights applies masking and box constraints correctly", {
+  # Example data
+  predicted_weights <- tibble::tibble(
+    stock_id = rep(1:10, each = 3),
+    date = rep(seq.Date(Sys.Date(), by = "days", length.out = 3), times = 10),
+    pred_weight = c(0.2, -0.5, 0.8,  # First stock, all three dates
+                0.3, 0.0, 0.2,   # Second stock
+                -0.6, 0.7, -0.4, # Third stock
+                0.9, -0.8, 0.1,  # Fourth stock
+                0.4, 0.3, -0.5,  # Fifth stock
+                -0.9, 0.1, 0.2,  # Sixth stock
+                0.5, 0.2, -0.1,  # Seventh stock
+                -0.3, 0.4, 0.7,  # Eighth stock
+                -0.2, 0.9, -0.5, # Ninth stock
+                0.3, -0.7, 0.4)  # Tenth stock
+  )
+
+  original_data <- tibble::tibble(
+    stock_id = rep(1:10, each = 3),
+    date = rep(seq.Date(Sys.Date(), by = "days", length.out = 3), times = 10),
+    mask = c(rep(1, 27), rep(0, 3)) # 3 stocks are masked on the last day
+  )
+
+  # Define a model config with box constraints:
+  model_config <- list(
+    min_weight = -0.5,
+    max_weight = 0.5
+  )
+
+  # Apply the postprocessing function
+  postprocessed_weights <- postprocess_weights(predicted_weights, original_data, "mask", model_config)
+
+  # Check if masking was applied correctly
+  masked_weights <- postprocessed_weights %>%
+    filter(stock_id %in% 10)
+  expect_true(all(masked_weights$pred_weight == 0))  # Masked stocks should have weights set to 0
+
+  # Check if box constraints are respected
+  expect_true(all(postprocessed_weights$pred_weight >= model_config$min_weight &
+                    postprocessed_weights$pred_weight <= model_config$max_weight))
+})

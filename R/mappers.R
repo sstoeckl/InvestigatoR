@@ -33,7 +33,7 @@ retpred_map <- function(t, data_subset, indices, model_function, model_config){
   # Set training and test data
   train_data <- data_subset %>%
     dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t])
-
+  return_label <- colnames(data_subset)[4]  # The return label is in the third
   test_data <- data_subset %>%
     dplyr::filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]) %>%
     dplyr::select(-all_of(return_label))  # Assuming 'return_label' is defined in the parent scope
@@ -129,7 +129,7 @@ weightpred_map <- function(t, data_subset, indices, model_function, model_config
   # Set training and test data
   train_data <- data_subset %>%
     dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t])
-
+  return_label <- colnames(data_subset)[4]  # The return label is in the third
   test_data <- data_subset %>%
     dplyr::filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]) %>%
     dplyr::select(-all_of(return_label))  # Assuming 'return_label' is defined in the parent scope

@@ -7,6 +7,8 @@
 backtesting_weights(
   data,
   return_label,
+  benchmark_weights = NULL,
+  mask_label = NULL,
   features,
   pf_config,
   portfolio_object = NULL,
@@ -23,6 +25,10 @@ backtesting_weights(
 \item{data}{Data frame in long format containing stock IDs, dates, and features.}
 
 \item{return_label}{Column name of the actual return.}
+
+\item{benchmark_weights}{Column name of the benchmark weights (optional).}
+
+\item{mask_label}{Column name of the mask indicator (optional).}
 
 \item{features}{Character vector of feature names used for weight prediction.}
 
@@ -49,8 +55,7 @@ An S3 object of class \code{portfolioReturns} containing the predicted weights a
 }
 \description{
 This function predicts portfolio weights directly using neural networks and other models.
-It can apply custom loss functions that maximize financial performance, such as returns,
-Sharpe ratio, or information ratio, while respecting constraints like turnover or leverage.
+It applies custom loss functions while respecting constraints like turnover or leverage.
 }
 \examples{
 \dontrun{
@@ -61,10 +66,25 @@ test_data_ml <- data_ml \%>\%
 
 return_label <- "R1M_Usd"
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
-pf_config <- list(predictions = c("keras_weights"))
+
+# Dummy weight function example (replace with your real model function)
+dummy_weights_func <- function(train_data, test_data, config) {
+  tibble::tibble(
+    stock_id = test_data$stock_id,
+    date = test_data$date,
+    pred_weight = runif(nrow(test_data), -1, 1)  # Random weights for example
+  )
+}
+
+pf_config <- list(
+  dummy_weights = list(
+    weight_func = "dummy_weights_func",
+    config1 = list(min_weight = -0.5, max_weight = 0.5),
+    config2 = list(min_weight = -0.5, max_weight = 0.5))
+)
 
 window_size <- "5 years"
-step_size <- "1 month"
+step_size <- "1 year"
 offset <- "1 month"
 in_sample <- TRUE
 num_cores <- 2

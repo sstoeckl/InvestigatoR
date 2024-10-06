@@ -1,0 +1,308 @@
+---
+title: "backtesting_weights_keras"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{backtesting_weights_keras}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, echo=TRUE, include=FALSE}
+library(InvestigatoR)
+library(reticulate)
+library(tensorflow)
+library(keras)
+library(dplyr)
+library(tibble)
+library(PerformanceAnalytics)
+```
+```{r setup2, echo=FALSE, include=TRUE}
+library(InvestigatoR)
+library(reticulate)
+library(tensorflow)
+library(keras)
+reticulate::use_virtualenv("C:/R/python/")
+# check for python availability and whether modules are installed
+reticulate::py_config()  
+reticulate::py_module_available("tensorflow")
+reticulate::py_module_available("keras")
+library(dplyr)
+library(tibble)
+library(PerformanceAnalytics)
+```
+
+# Introduction
+
+In this vignette, we demonstrate how to use the `InvestigatoR` package to directly optimize portfolio weights using Keras models. We progressively build up from a simple model to more advanced configurations that include custom activations, penalties on turnover, leverage, and diversification, and early stopping. Along the way, we explain the intuition behind each step, and finally, we'll backtest the models and analyze the results.
+
+---
+
+## Step 1: A Simple Keras Model
+
+We start with a basic 3-layer neural network using ReLU activations and no custom constraints or penalties. This step introduces the basics of setting up a Keras model to predict portfolio weights.
+
+```{r keras_simple_model}
+# Simple 3-layer Keras model, no callbacks or custom activations
+config_keras_simple <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1)  # No custom activation
+  ),
+  loss = list(
+    name = "sharpe_ratio_loss", 
+    transaction_costs = 0.001, 
+    delta = 0.1, 
+    lambda = 0.1, 
+    leverage = 1.0, 
+    eta = 0.1  # Standard Sharpe ratio loss with penalties
+  ),
+  optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+  epochs = 10,
+  verbose = 0,
+  seeds = c(42, 123, 456) # set random seeds to average over results
+)
+```
+
+### Explanation
+
+This simple model will help us understand how a neural network allocates portfolio weights based purely on the input data, without any additional constraints or penalties.
+
+---
+
+## Step 2: Add Custom Activations (Long-Only Portfolio)
+
+In this step, we introduce a custom activation function (`activation_box_sigmoid`) that constrains the portfolio to long-only positions, ensuring that all portfolio weights are positive and bounded between 0 and 1.
+
+```{r keras_with_activation}
+# Keras model with custom activation (long-only constraint)
+config_keras_with_activation <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))  # Long-only
+  ),
+  loss = list(name = "sharpe_ratio_loss"),
+  optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+  epochs = 50,
+  verbose = 0,
+  seeds = c(42, 123, 456)
+)
+```
+
+### Why Custom Activations?
+
+This step introduces long-only constraints, ensuring that all portfolio weights are non-negative. This is essential for many portfolios that disallow short selling.
+
+---
+
+## Step 3: Add Early Stopping
+
+We now increase the number of epochs and introduce early stopping. Early stopping helps prevent overfitting by monitoring the loss and halting training when no improvement is detected.
+
+```{r keras_with_early_stopping}
+# Keras model with early stopping
+config_keras_with_early_stopping <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+  ),
+  loss = list(name = "sharpe_ratio_loss", 
+    transaction_costs = 0.001, 
+    delta = 0.1, 
+    lambda = 0.1, 
+    leverage = 1.0, 
+    eta = 0.1
+  ),
+  optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 100,  # More epochs with early stopping
+  verbose = 0,
+  seeds = c(42, 123, 456)
+)
+```
+
+### Why Early Stopping?
+
+Increasing the number of epochs gives the model more time to learn, but early stopping ensures that training halts once the loss stops improving, reducing overfitting.
+
+---
+
+## Step 4: Increase Diversification Penalty
+
+In this step, we increase the diversification penalty (`lambda`). This encourages the model to diversify the portfolio, reducing over-concentration in a few assets.
+
+```{r keras_increase_diversification}
+# Keras model with a higher diversification penalty
+config_keras_increase_diversification <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+  ),
+  loss = list(
+    name = "sharpe_ratio_loss", 
+    transaction_costs = 0.001, 
+    delta = 0.1, 
+    lambda = 0.5,  # Stronger diversification penalty
+    leverage = 1.0, 
+    eta = 0.1
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  epochs = 100,
+  verbose = 0,
+  seeds = c(42, 123, 456)
+)
+```
+
+### Why Increase Diversification Penalty?
+
+Increasing the diversification penalty encourages the model to spread its portfolio across a wider range of assets, reducing the risk of over-concentration.
+
+---
+
+## Step 5: Increase Leverage Penalty
+
+We now increase the leverage penalty (`eta`), which discourages the model from using high leverage, limiting the portfolio's exposure to excessive risk.
+
+```{r keras_increase_leverage}
+# Keras model with a higher leverage penalty
+config_keras_increase_leverage <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+  ),
+  loss = list(
+    name = "sharpe_ratio_loss", 
+    transaction_costs = 0.001, 
+    delta = 0.1, 
+    lambda = 0.1, 
+    leverage = 1.0, 
+    eta = 0.5  # Stronger leverage penalty
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  epochs = 100,
+  verbose = 0,
+  seeds = c(42, 123, 456)
+)
+```
+
+### Why Increase Leverage Penalty?
+
+A higher leverage penalty reduces the likelihood of the model allocating too much weight to individual assets, mitigating the risk of excessive leverage.
+
+---
+
+## Step 6: Add Turnover Penalty
+
+Turnover refers to the frequency with which assets are bought and sold in a portfolio. High turnover can incur additional costs. We add a penalty to discourage high turnover.
+
+```{r keras_increase_turnover}
+# Keras model with turnover penalty
+config_keras_increase_turnover <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+  ),
+  loss = list(
+    name = "sharpe_ratio_loss", 
+    transaction_costs = 0.005,  # Increase transaction costs to penalize high turnover
+    delta = 0.1, 
+    lambda = 0.1, 
+    leverage = 1.0, 
+    eta = 0.1
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  metrics = list("turnover_metric"),
+  epochs = 100,
+  verbose = 0,
+  seeds = c(42, 123, 456)
+)
+```
+
+### Why Add a Turnover Penalty?
+
+Controlling turnover is important because frequent trading can lead to higher transaction costs, which can erode returns over time. Adding a penalty helps balance between achieving returns and controlling costs.
+
+---
+
+## Portfolio Configuration for Backtesting
+
+Now that we've defined our models, we set up the portfolio configuration to test all of these different Keras setups in one backtest.
+
+```{r portfolio_config}
+# Define portfolio config with all Keras models
+pf_config <- list(
+  keras_weights_simple = list(
+    weight_func = "keras_weights",
+    config1 = config_keras_simple,
+    config2 = config_keras_with_activation,
+    config3 = config_keras_with_early_stopping,
+    config4 = config_keras_increase_diversification,
+    config5 = config_keras_increase_leverage,
+    config6 = config_keras_increase_turnover
+  )
+)
+```
+
+---
+
+## Running the Backtest
+
+We now run the backtest using the different Keras models we defined above. We will evaluate their performance based on Sharpe ratios, turnover, diversification, and leverage.
+
+```{r run_backtest}
+# Run the backtest with all Keras configurations
+data("data_ml")
+weights <- backtesting_weights(
+  data = data_ml, 
+  return_label = "R1M_Usd", 
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"), 
+  pf_config = pf_config,  # Portfolio config with multiple Keras configurations
+  rolling = TRUE, 
+  window_size = "5 years", 
+  step_size = "1 month", 
+  offset = "1 month", 
+  in_sample = TRUE, 
+  num_cores = 2, 
+  verbose = TRUE
+)
+```
+
+---
+
+## Analyzing Results
+
+We analyze the results of the backtest to see how the different configurations performed in terms of turnover, leverage, diversification, and Sharpe ratio.
+
+```{r analyze_results}
+# Summarize the portfolio results
+weights_summary <- summary(weights)
+print(weights_summary)
+
+# Visualize the portfolio performance
+plot(weights)
+
+# Additional analysis using PerformanceAnalytics
+summary(weights, type = "table.AnnualizedReturns")
+summary(weights, type = "table.Distributions")
+```
+
+---
+
+## Conclusion
+
+This vignette has shown how to progressively build more complex Keras models to predict and optimize portfolio weights using the `InvestigatoR` package. By adding custom activations, early stopping, and penalties on turnover, leverage, and diversification, we can better control portfolio risk and performance.
+

@@ -31,17 +31,34 @@
 #' @examples
 #' \dontrun{
 #' data(data_ml)
-#' train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
-#' test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+#' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |>
+#'   group_by(date) |>
+#'   mutate(benchmark = Mkt_Cap_3M_Usd/sum(Mkt_Cap_3M_Usd)) |> ungroup() |>
+#'   select(stock_id,date,benchmark,return=R1M_Usd,all_of(features)) |> arrange(date,stock_id)
+#' test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |>
+#'   group_by(date) |>
+#'   mutate(benchmark = Mkt_Cap_3M_Usd/sum(Mkt_Cap_3M_Usd)) |> ungroup() |>
+#'   select(stock_id,date,benchmark,all_of(features)) |> arrange(date,stock_id)
+#'
 #' config <- list(
 #'   layers = list(
 #'     list(type = "dense", units = 32, activation = "relu"),
 #'     list(type = "dense", units = 16, activation = "relu"),
-#'     list(type = "dense", units = 1, activation = "linear")
+#'     list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.5, max_weight = 1.0))
 #'   ),
-#'   loss = sharpe_ratio_loss_keras,  # Custom Sharpe ratio loss
-#'   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-#'   epochs = 10,
+#'   loss = list(name = "sharpe_ratio_loss", transaction_costs = 0.001,
+#'       delta = 0.1,
+#'       lambda = 0.1, # Diversification penalty multiplier
+#'       leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
+#'   metric = list(name = "sharpe_ratio_loss"),  # Custom Sharpe ratio loss
+#'   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+#'   metrics = list(turnover_metric, leverage_metric, diversification_metric),  # Custom metrics added here
+#'   callbacks = list(
+#'     callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+#'   ),
+#'   epochs = 50,
 #'   batch_size = 128,
 #'   verbose = 1,
 #'   seeds = c(42, 123, 456),
@@ -74,15 +91,14 @@ keras_weights <- function(train_data, test_data, config = list()) {
   stock_id <- train_data$stock_id
   date <- train_data$date
 
-  # Check if benchmark and mask are present, otherwise set defaults
+  # Check if benchmark is present, otherwise set defaults
   benchmark <- train_data[, 3]
-  mask <- train_data[, 4]
-  return_label <- colnames(train_data)[5]
-  feature_names <- colnames(train_data)[6:ncol(train_data)]
+  return_label <- colnames(train_data)[4]
+  feature_names <- colnames(train_data)[5:ncol(train_data)]
 
   # Convert to matrices for Keras
   train_x <- as.matrix(train_data[, feature_names])
-  train_y <- as.matrix(cbind(stock_id, as.numeric(date), train_data[[return_label]], mask, benchmark))  # Attach mask and benchmark to y
+  train_y <- as.matrix(cbind(stock_id, as.numeric(date), benchmark, train_data[[return_label]]))  # Attach mask and benchmark to y
   test_x <- as.matrix(test_data[, feature_names])
 
   # Dynamically determine input shape based on number of features
@@ -117,22 +133,26 @@ keras_weights <- function(train_data, test_data, config = list()) {
       }
     }
 
-    # Extract optimizer function and its parameters
+    # Extract optimizer function and its parameters from the config
     optimizer_name <- config$optimizer$name
     optimizer_func <- match.fun(optimizer_name)
-    optimizer <- do.call(optimizer_func, config$optimizer[-1])  # Remove 'name' and pass rest of the args
+    optimizer <- do.call(optimizer_func, config$optimizer[-1])  # Remove 'name' and pass the rest of the args
 
-    # Use custom loss function if provided, else use default
-    loss_function <- config$loss %||% "mean_squared_error"
+    # Extract custom metrics from config (if provided)
+    custom_metrics <- config$metrics %||% list()
+
+    # Extract loss function and its parameters from the config
+    loss_name <- config$loss$name
+    loss_func <- match.fun(loss_name)
 
     # Set the verbose level (default: 0)
     verbose_level <- config$verbose %||% 0
 
-    # Compile the model with the optimizer, loss function, and metrics
+    # Compile the model with the optimizer and loss function
     model %>% compile(
-      loss = loss_function,
+      loss = do.call(loss_func, config$loss[-1]),  # Remove 'name' and pass the rest of the args
       optimizer = optimizer,
-      metrics = c('mean_squared_error')
+      metrics = custom_metrics  # Add custom metrics here
     )
 
     # Handle callbacks (e.g., early stopping)
@@ -142,7 +162,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
     history <- model %>% fit(
       train_x, train_y,
       epochs = config$epochs,
-      batch_size = config$batch_size,
+      batch_size = nrow(train_x),
       verbose = verbose_level,
       callbacks = callbacks_list
     )
@@ -182,132 +202,324 @@ keras_weights <- function(train_data, test_data, config = list()) {
   return(predictions)
 }
 
-
-#' Custom Sharpe Ratio Loss with Constraints for Keras Models
+#' Custom Sharpe Ratio Loss Function for Keras
 #'
-#' This function calculates the Sharpe ratio for portfolio optimization using Keras, incorporating constraints
-#' like leverage, weight limits, and turnover. It supports both long-only and long-short portfolios.
-#' The loss function is designed to maximize the Sharpe ratio while applying penalties for turnover and weight constraints.
+#' This function calculates a custom Sharpe ratio-based loss for portfolio optimization using Keras,
+#' with penalties for turnover, lack of diversification, and leverage deviations.
 #'
-#' ## Arguments
-#' - `turnover_penalty_weight`: Penalty applied to turnover in the portfolio (default: 0.01).
-#' - `max_weight`: Maximum allowable weight for any single stock (default: 0.1).
-#' - `min_weight`: Minimum allowable weight for any single stock (default: 0).
-#' - `weights_sum`: Target sum of portfolio weights (default: 1 for long-only, 0 for market-neutral).
-#' - `abs_weights_sum`: Maximum absolute sum of portfolio weights to control leverage (default: 1 for long-only, higher for long-short).
+#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
+#' @param y_pred Tensor. Predicted portfolio weights.
+#' @param transaction_costs Numeric. Penalty applied to portfolio turnover (default: 0.001).
+#' @param delta Numeric. Diversification target (default: 0.1).
+#' @param lambda Numeric. Diversification penalty multiplier (default: 0.1).
+#' @param leverage Numeric. Target portfolio leverage (default: 1.0).
+#' @param eta Numeric. Leverage penalty multiplier (default: 0.1).
 #'
-#' @param y_true Matrix with columns for stock_id, date, actual_return, and optional mask.
-#' @param y_pred Predicted portfolio weights.
-#' @param turnover_penalty_weight Numeric. Penalty for portfolio turnover (default: 0.01).
-#' @param max_weight Numeric. Maximum weight for a single stock (default: 0.1).
-#' @param min_weight Numeric. Minimum weight for a single stock (default: 0).
-#' @param weights_sum Numeric. Target sum of portfolio weights (default: 1).
-#' @param abs_weights_sum Numeric. Maximum absolute sum of portfolio weights (default: 1).
-#'
-#' @return Numeric. The loss value (negative Sharpe ratio) to minimize during training.
+#' @return A scalar loss value that combines the negative Sharpe ratio with penalties for turnover, diversification, and leverage.
 #' @import keras
 #' @import tensorflow
-#' @export
 #'
 #' @examples
-#' # Example: Simple portfolio with 3 stocks and 3 dates
-#' # Generate a small example dataset
+#' \dontrun{
+#' library(keras)
+#' library(tensorflow)
+#'
+#' # Example: simple portfolio with 3 stocks and 2 dates
 #' example_data <- data.frame(
-#'   stock_id = c(1, 1, 2, 2, 3, 3,1,2,3),
-#'     date = c(1, 2, 1, 2, 1, 2,3,3,3),
-#'       actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02,0.04,0.05,0.06),
-#'       mask = c(1, 1, 1, 1, 1, 1,0,0,0)
-#'       )
-#' # Predicted weights (this would come from your model in practice)
-#' predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2,0.,0.9,0.8)
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark=rep(0, 6),
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)
+#' )
+#'
+#' # Sample predicted weights
+#' predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2)
 #'
 #' # Convert data to TensorFlow tensors
 #' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
 #' y_pred <- tf$constant(predicted_weights, dtype = "float32")
 #'
-#' # Calculate loss using the custom Sharpe ratio loss function
-#' loss_value <- sharpe_ratio_loss_keras(
+#' # Call the custom loss function
+#' loss_value <- sharpe_ratio_loss(
 #'   y_true = y_true,
 #'   y_pred = y_pred,
-#'   turnover_penalty_weight = 0.005,
-#'   max_weight = 0.5,
-#'   min_weight = -0.5,
-#'   weights_sum = 1,
-#'   abs_weights_sum = 1
+#'   transaction_costs = 0.005,
+#'   delta = 0.1,     # Diversification penalty weight
+#'   lambda = 0.1,    # Diversification penalty multiplier
+#'   leverage = 1.0,  # Target leverage
+#'   eta = 0.1        # Leverage penalty multiplier
 #' )
+#'
+#' # Print the calculated loss value
 #' print(loss_value)
-sharpe_ratio_loss_keras <- function(
-    y_true, y_pred,
-    turnover_penalty_weight = 0.01,
-    max_weight = 0.1,
-    min_weight = 0,
-    weights_sum = 1,
-    abs_weights_sum = 1
-) {
-  # Extract stock_id, date, actual_return, and mask from y_true
-  stock_ids <- tf$cast(y_true[, 1], dtype = "int32")
-  dates <- tf$cast(y_true[, 2], dtype = "int32")
-  actual_returns <- y_true[, 3]
-  mask <- y_true[, 4]
+#' }
+# Loss function wrapper
+sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0.1, leverage = 1.0, eta = 0.1) {
+  function(y_true, y_pred) {
+    # Extract stock_id, date, and actual_return from y_true
+    stock_ids <- k_cast(y_true[, 1], "int32")
+    dates <- k_cast(y_true[, 2], "int32")
+    actual_returns <- y_true[, 4]
 
-  # Create unique stock_id and date vectors for reshaping
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- k_shape(unique_dates)[1]
+    num_stocks <- k_shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists
+    stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
+    date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+
+    # Stack the indices tensor for scatter_nd
+    indices <- k_stack(list(date_indices, stock_indices), axis = -1)
+    indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+
+    # Reshape actual_returns and y_pred to be compatible with the indices
+    actual_returns <- k_reshape(actual_returns, shape = c(-1))  # Flatten actual_returns to be a vector
+    y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+
+    # Scatter the actual returns and predicted weights into the tensors
+    stock_returns_tensor <- tf$scatter_nd(indices, actual_returns, shape = list(num_dates, num_stocks))
+    weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+
+    # Apply weight normalization based on the sum of absolute weights
+    weight_sum_per_date <- k_sum(k_abs(weights_tensor), axis = -1, keepdims = TRUE)
+    normalized_weights <- weights_tensor / (weight_sum_per_date + k_epsilon())
+
+    # Calculate portfolio returns as the sum of weighted stock returns per date
+    portfolio_returns <- k_sum(normalized_weights * stock_returns_tensor, axis = -1)
+
+    # Calculate turnover: absolute change in weights from one time step to the next
+    zero_weights <- k_zeros_like(normalized_weights[1, , drop = FALSE])
+    padded_weights <- tf$concat(list(zero_weights, normalized_weights[1:(num_dates - 1), ]), axis = 0L)
+    weight_differences <- tf$concat(list(zero_weights,(k_abs(normalized_weights - padded_weights))[2:num_dates,]), axis = 0L)
+    turnover <- k_sum(weight_differences, axis = -1)
+
+    # Adjust portfolio returns by subtracting the turnover penalty
+    adjusted_portfolio_returns <- portfolio_returns - (transaction_costs * turnover)
+
+    # Calculate the Sharpe ratio
+    portfolio_return_mean <- k_mean(adjusted_portfolio_returns)
+    portfolio_return_std <- k_std(adjusted_portfolio_returns)
+    sharpe_ratio <- portfolio_return_mean / (portfolio_return_std + k_epsilon())
+
+    # Diversification penalty: penalize portfolios with low diversification
+    variance_penalty <- lambda * (k_mean(k_abs(k_sum(k_square(normalized_weights), axis = -1)))- k_cast(1/num_stocks, "float32"))
+
+    # Leverage penalty: penalize deviations from target leverage
+    leverage_penalty <- eta * k_mean(k_square(k_sum(k_abs(normalized_weights), axis = -1) - leverage))
+
+    # Total penalty combining diversification and leverage penalties
+    total_penalty <- variance_penalty + leverage_penalty
+
+    # Negative Sharpe ratio as the loss (to maximize Sharpe ratio)
+    loss <- -sharpe_ratio + total_penalty
+
+    return(loss)
+  }
+}
+# Custom Turnover Metric for Keras
+#'
+#' This function calculates and reports the portfolio turnover during training.
+#'
+#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
+#' @param y_pred Tensor. Predicted portfolio weights.
+#'
+#' @return A scalar turnover value for the current batch of data.
+#' @import keras
+#' @import tensorflow
+#'
+#' @examples
+#' \dontrun{
+#' library(keras)
+#' library(tensorflow)
+#'
+#' # Example: simple portfolio with 3 stocks and 2 dates
+#' example_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)
+#' )
+#'
+#' # Sample predicted weights
+#' predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2)
+#'
+#' # Convert data to TensorFlow tensors
+#' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
+#' y_pred <- tf$constant(predicted_weights, dtype = "float32")
+#'
+#' # Call the custom turnover metric function
+#' turnover_value <- turnover_metric(
+#'   y_true = y_true,
+#'   y_pred = y_pred
+#' )
+#'
+#' # Print the calculated turnover value
+#' print(turnover_value)
+#' }
+
+turnover_metric <- function() {
+  custom_metric("turnover_metric", function(y_true, y_pred) {
+  # Extract stock_id, date, and actual_return from y_true
+  stock_ids <- k_cast(y_true[, 1], "int32")
+  dates <- k_cast(y_true[, 2], "int32")
+
+  # Get unique stock_id and date vectors for reshaping
   unique_stock_ids <- tf$unique(stock_ids)$y
   unique_dates <- tf$unique(dates)$y
 
-  # Create a placeholder tensor to hold all stock-date combinations
-  num_dates <- tf$shape(unique_dates)[1]
-  num_stocks <- tf$shape(unique_stock_ids)[1]
+  # Determine the number of unique stocks and dates
+  num_dates <- k_shape(unique_dates)[1]
+  num_stocks <- k_shape(unique_stock_ids)[1]
 
   # Get the indices for stock_id and date in the unique lists
-  stock_indices <- tf$map_fn(function(x) tf$cast(tf$where(unique_stock_ids == x), dtype = "int32"), stock_ids)
-  date_indices <- tf$map_fn(function(x) tf$cast(tf$where(unique_dates == x), dtype = "int32"), dates)
+  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
+  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
 
   # Stack the indices tensor for scatter_nd
-  indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
-  indices <- tf$reshape(indices, shape = list(tf$shape(y_pred)[1], 2L))
+  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
+  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
 
-  # Create zero-initialized tensors for stock returns and weights
-  stock_returns_tensor <- tf$zeros(c(num_dates, num_stocks))
-  weights_tensor <- tf$zeros(c(num_dates, num_stocks))
+  # Reshape y_pred to be compatible with the indices
+  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
 
-  # Use scatter_nd to place values from y_true and y_pred into the tensors
-  stock_returns_tensor <- tf$scatter_nd(indices, actual_returns, shape = c(num_dates, num_stocks))
-  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = c(num_dates, num_stocks))
+  # Create zero-initialized tensors for weights
+  weights_tensor <- k_zeros(c(num_dates, num_stocks))
 
-  # Apply mask to filter relevant stocks
-  mask_tensor <- tf$scatter_nd(indices, mask, shape = c(num_dates, num_stocks))
-  stock_returns_tensor <- stock_returns_tensor * mask_tensor
-  weights_tensor <- weights_tensor * mask_tensor
+  # Scatter the predicted weights into the tensor
+  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
 
-  # Apply weight constraints (min and max weights)
-  clipped_weights <- tf$clip_by_value(weights_tensor, min_weight, max_weight)
-
-  # Normalize the weights so they sum to the specified value for each date
-  weights_sum_per_date <- tf$reduce_sum(clipped_weights, axis = 1L, keepdims = TRUE)
-  normalized_weights <- clipped_weights / (weights_sum_per_date + k_epsilon())
-
-  # Calculate portfolio returns
-  portfolio_returns <- tf$reduce_sum(normalized_weights * stock_returns_tensor, axis = 1L)
+  # Apply weight normalization based on the sum of absolute weights
+  weight_sum_per_date <- k_sum(k_abs(weights_tensor), axis = -1, keepdims = TRUE)
+  normalized_weights <- weights_tensor / (weight_sum_per_date + k_epsilon())
 
   # Calculate turnover: absolute change in weights from one time step to the next
-  zero_weights <- tf$zeros_like(normalized_weights[1L, , drop = FALSE])
-  padded_weights <- tf$concat(list(zero_weights, normalized_weights[1L:(num_dates-1L), ]), axis = 0L)
-  weight_differences <- tf$abs(tf$subtract(normalized_weights, padded_weights))
-  turnover <- tf$reduce_sum(weight_differences, axis = 1L)
+  zero_weights <- k_zeros_like(normalized_weights[1, , drop = FALSE])
+  padded_weights <- tf$concat(list(zero_weights, normalized_weights[1:(num_dates - 1), ]), axis = 0L)
+  weight_differences <- tf$concat(list(zero_weights, (k_abs(normalized_weights - padded_weights))[2:num_dates,]), axis = 0L)
+  turnover <- k_sum(weight_differences, axis = -1)
 
-  # Adjust portfolio returns by subtracting the turnover penalty
-  adjusted_portfolio_returns <- portfolio_returns - (turnover_penalty_weight * turnover)
-
-  # Calculate the Sharpe ratio
-  portfolio_return_mean <- tf$reduce_mean(adjusted_portfolio_returns)
-  portfolio_return_std <- tf$math$reduce_std(adjusted_portfolio_returns)
-  sharpe_ratio <- portfolio_return_mean / (portfolio_return_std + k_epsilon())
-
-  # Negative Sharpe ratio as the loss (to maximize Sharpe ratio)
-  loss <- -sharpe_ratio
-
-  return(loss)
+  # Return the mean turnover value
+  return(k_mean(turnover))
+  })
 }
+
+# Leverage Metric for Keras
+#'
+#' This function calculates and reports the leverage of the portfolio during training.
+#' Leverage is defined as the sum of absolute portfolio weights for each time period.
+#'
+#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
+#' @param y_pred Tensor. Predicted portfolio weights.
+#'
+#' @return A scalar leverage value for the current batch of data.
+#' @import keras
+#' @import tensorflow
+#'
+#' @examples
+#' \dontrun{
+#' # Example: Calculate leverage metric
+#' leverage_value <- leverage_metric(y_true, y_pred)
+#' print(leverage_value)
+#' }
+leverage_metric <- function() {
+  custom_metric("leverage_metric", function(y_true, y_pred) {
+  # Extract stock_id, date, and actual_return from y_true
+  stock_ids <- k_cast(y_true[, 1], "int32")
+  dates <- k_cast(y_true[, 2], "int32")
+
+  # Get unique stock_id and date vectors for reshaping
+  unique_stock_ids <- tf$unique(stock_ids)$y
+  unique_dates <- tf$unique(dates)$y
+
+  # Determine the number of unique stocks and dates
+  num_dates <- k_shape(unique_dates)[1]
+  num_stocks <- k_shape(unique_stock_ids)[1]
+
+  # Get the indices for stock_id and date in the unique lists
+  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
+  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+
+  # Stack the indices tensor for scatter_nd
+  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
+  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+
+  # Reshape y_pred to be compatible with the indices
+  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+
+  # Create zero-initialized tensors for weights
+  weights_tensor <- k_zeros(c(num_dates, num_stocks))
+
+  # Scatter the predicted weights into the tensor
+  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+
+  # Calculate leverage: sum of absolute weights per date
+  leverage <- k_sum(k_abs(weights_tensor), axis = -1)
+
+  # Return the mean leverage value
+  return(k_mean(leverage))
+  })
+}
+
+# Diversification Metric for Keras (Herfindahl-Hirschman Index)
+#'
+#' This function calculates and reports the diversification of the portfolio during training,
+#' using the Herfindahl-Hirschman Index (HHI), which is the sum of the squared portfolio weights.
+#'
+#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
+#' @param y_pred Tensor. Predicted portfolio weights.
+#'
+#' @return A scalar diversification value (HHI) for the current batch of data.
+#' @import keras
+#' @import tensorflow
+#'
+#' @examples
+#' \dontrun{
+#' # Example: Calculate diversification metric (HHI)
+#' diversification_value <- diversification_metric(y_true, y_pred)
+#' print(diversification_value)
+#' }
+diversification_metric <- function() {
+  custom_metric("diversification_metric", function(y_true, y_pred) {  # Extract stock_id, date, and actual_return from y_true
+  stock_ids <- k_cast(y_true[, 1], "int32")
+  dates <- k_cast(y_true[, 2], "int32")
+
+  # Get unique stock_id and date vectors for reshaping
+  unique_stock_ids <- tf$unique(stock_ids)$y
+  unique_dates <- tf$unique(dates)$y
+
+  # Determine the number of unique stocks and dates
+  num_dates <- k_shape(unique_dates)[1]
+  num_stocks <- k_shape(unique_stock_ids)[1]
+
+  # Get the indices for stock_id and date in the unique lists
+  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
+  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+
+  # Stack the indices tensor for scatter_nd
+  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
+  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+
+  # Reshape y_pred to be compatible with the indices
+  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+
+  # Create zero-initialized tensors for weights
+  weights_tensor <- k_zeros(c(num_dates, num_stocks))
+
+  # Scatter the predicted weights into the tensor
+  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+
+  # Calculate diversification using Herfindahl-Hirschman Index (sum of squared weights)
+  hhi <- k_sum(k_square(weights_tensor), axis = -1)
+
+  # Return the mean diversification (HHI) value
+  return(k_mean(hhi))
+  })
+}
+
 
 #' Dummy MSE Loss Function with Stock ID, Date, and Actual Return
 #'
@@ -319,13 +531,12 @@ sharpe_ratio_loss_keras <- function(
 #' @param y_pred A vector of predicted portfolio weights/returns.
 #'
 #' @return The calculated MSE loss value.
-#' @export
 dummy_mse_loss <- function(y_true, y_pred) {
   # Extract the actual returns from the 3rd column of y_true
   stock_ids <- tf$cast(y_true[, 1], dtype = "int32")
   dates <- tf$cast(y_true[, 2], dtype = "int32")
-  actual_returns <- y_true[, 3]
-  mask <- y_true[, 4]
+  actual_returns <- y_true[, 4]
+  benchmark <- y_true[, 3]
 
   # Calculate Mean Squared Error (MSE)
   #mse <- tf$reduce_mean(tf$square(actual_returns - y_pred))
@@ -333,3 +544,171 @@ dummy_mse_loss <- function(y_true, y_pred) {
 
   return(mse)
 }
+
+
+########################### ACTIVATIONS
+#' Box Constraints Activation with Sigmoid Scaling
+#'
+#' This activation function maps the output using a sigmoid function to ensure that the predicted weights fall
+#' within a specified range (`min_weight`, `max_weight`).
+#'
+#' @param min_weight Minimum weight to map to (default: -1.0).
+#' @param max_weight Maximum weight to map to (default: 1.0).
+#' @return A Keras activation function that maps the input to the desired range using the sigmoid function.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' data(data_ml)
+#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |> arrange(date, stock_id)
+#' test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |> arrange(date, stock_id)
+#' config_box_sigmoid <- list(
+#'   layers = list(
+#'     list(type = "dense", units = 32, activation = "relu"),
+#'     list(type = "dense", units = 16, activation = "relu"),
+#'     list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight=0.5,max_weight=1))
+#'   ),
+#'   loss = "dummy_mse_loss",
+#'   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+#'   epochs = 10,
+#'   batch_size = 128,
+#'   verbose = 0,
+#'   seeds = c(42)
+#' )
+#' weights <- keras_weights(train_data_ex, test_data_ex, config_box_sigmoid)
+#' print(weights)
+#' }
+activation_box_sigmoid <- function(min_weight = -1.0, max_weight = 1.0) {
+  function(x) {
+    # Map to the desired range using sigmoid
+    x_mapped <- min_weight + (max_weight - min_weight) * k_sigmoid(x)
+    return(x_mapped)
+  }
+}
+#' Box Constraints Activation with Sigmoid Scaling
+#'
+#' This activation function maps the output using a sigmoid function to ensure that the predicted weights fall
+#' within a specified range (`min_weight`, `max_weight`).
+#'
+#' @param min_weight Minimum weight to map to (default: -1.0).
+#' @param max_weight Maximum weight to map to (default: 1.0).
+#' @return A Keras activation function that maps the input to the desired range using the sigmoid function.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' data(data_ml)
+#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |> arrange(date, stock_id)
+#' test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |> arrange(date, stock_id)
+#' config_box_tanh <- list(
+#'   layers = list(
+#'     list(type = "dense", units = 32, activation = "relu"),
+#'     list(type = "dense", units = 16, activation = "relu"),
+#'     list(type = "dense", units = 1, activation = activation_box_tanh(min_weight=0.5,max_weight=1))
+#'   ),
+#'   loss = "dummy_mse_loss",
+#'   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+#'   epochs = 10,
+#'   batch_size = 128,
+#'   verbose = 0,
+#'   seeds = c(42)
+#' )
+#' weights <- keras_weights(train_data_ex, test_data_ex, config_box_tanh)
+#' print(weights)
+#' }
+activation_box_tanh <- function(min_weight = -1.0, max_weight = 1.0) {
+  function(x) {
+    # Map to the desired range using sigmoid
+    x_mapped <- min_weight + (max_weight - min_weight) * k_tanh(x)
+    return(x_mapped)
+  }
+}
+
+
+#' Box Constraints and Sum Constraints Activation with Sigmoid Scaling
+#'
+#' This activation function first maps the output using a sigmoid function to ensure that the predicted weights fall
+#' within a specified range (`min_weight`, `max_weight`), then normalizes the weights to ensure they sum to `target_sum`.
+#'
+#' @param min_weight Minimum weight to map to (default: -1.0).
+#' @param max_weight Maximum weight to map to (default: 1.0).
+#' @param target_sum The target sum of the weights (default: 0.0).
+#' @return A Keras activation function that maps the input to the desired range using the sigmoid function and normalizes the sum.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' data(data_ml)
+#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |> arrange(date, stock_id)
+#' test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |> arrange(date, stock_id)
+#' config_box_sum_sigmoid <- list(
+#'   layers = list(
+#'     list(type = "dense", units = 32, activation = "relu"),
+#'     list(type = "dense", units = 16, activation = "relu"),
+#'     list(type = "dense", units = 1, activation = activation_box_sum_sigmoid(min_weight=0.5,max_weight=1,target_sum=1))
+#'   ),
+#'   loss = "dummy_mse_loss",
+#'   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+#'   epochs = 10,
+#'   batch_size = 128,
+#'   verbose = 1,
+#'   seeds = c(42)
+#' )
+#' weights <- keras_weights(train_data_ex, test_data_ex, config_box_sum_sigmoid)
+#' print(weights)
+#' }
+activation_box_sum_sigmoid <- function(min_weight = -1.0, max_weight = 1.0, target_sum = 0) {
+  function(x) {
+    # Map to the desired range using sigmoid
+    x_mapped <- min_weight + (max_weight - min_weight) * k_sigmoid(x)
+    # Normalize the weights to ensure they sum to target_sum
+    weight_sum <- k_sum(x_mapped, axis = -1, keepdims = TRUE)
+    return(x_mapped - weight_sum + target_sum)
+  }
+}
+
+#' Sum Constraints Activation with Sigmoid Scaling
+#'
+#' This activation function normalizes the predicted weights to ensure they sum to `target_sum` after applying the sigmoid function.
+#'
+#' @param min_weight Minimum weight (default: -1.0).
+#' @param max_weight Maximum weight (default: 1.0).
+#' @param target_sum The target sum of the weights (default: 0.0).
+#' @return A Keras activation function that normalizes the weights to meet the target sum.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' data(data_ml)
+#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |> arrange(date, stock_id)
+#' test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |> arrange(date, stock_id)
+#' config_sum_sigmoid <- list(
+#'   layers = list(
+#'     list(type = "dense", units = 32, activation = "relu"),
+#'     list(type = "dense", units = 16, activation = "relu"),
+#'     list(type = "dense", units = 5, activation = activation_sum_sigmoid(target_sum = 0))
+#'   ),
+#'   loss = "dummy_mse_loss",
+#'   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+#'   epochs = 10,
+#'   batch_size = 128,
+#'   verbose = 1,
+#'   seeds = c(42)
+#' )
+#' weights <- keras_weights(train_data_ex, test_data_ex, config_sum_sigmoid)
+#' print(weights)
+#' }
+activation_sum_sigmoid <- function(target_sum = 0.0) {
+  function(x) {
+    # Map to the desired range using sigmoid
+    x_mapped <- k_sigmoid(x)
+    # Normalize the weights to ensure they sum to target_sum
+    weight_sum <- k_sum(x_mapped, axis = -1, keepdims = TRUE)
+    return(x_mapped - weight_sum + target_sum)
+  }
+}
+

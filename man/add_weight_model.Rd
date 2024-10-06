@@ -26,10 +26,12 @@ Add weight model and predictions to portfolioReturns S3 object
 data <- tibble::tibble(
   stock_id = 1:100,
   date = rep(Sys.Date(), 100),
+  returns=runif(100),
   weights = runif(100)
 )
-pf <- create_portfolios(data, "return_label")
-pf <- add_weight_model(pf, "keras_weights", list(epochs = 50), data)
+return_label <- "returns"
+pf <- create_portfolios(data, return_label)
+pf <- add_weight_model(pf, "keras_weights", list(epochs = 50), data |> select(-returns))
 print(pf)
 }
 }

@@ -39,17 +39,34 @@ Additionally, this function can handle masking and benchmark weights, which will
 \examples{
 \dontrun{
 data(data_ml)
-train_data_ex <- data_ml[1:100, c("stock_id", "date", "R1M_Usd", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
-test_data_ex <- data_ml[101:150, c("stock_id", "date", "Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")]
+test_data_ml <- data_ml \%>\% filter(stock_id <= 5)
+features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |>
+  group_by(date) |>
+  mutate(benchmark = Mkt_Cap_3M_Usd/sum(Mkt_Cap_3M_Usd)) |> ungroup() |>
+  select(stock_id,date,benchmark,return=R1M_Usd,all_of(features)) |> arrange(date,stock_id)
+test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |>
+  group_by(date) |>
+  mutate(benchmark = Mkt_Cap_3M_Usd/sum(Mkt_Cap_3M_Usd)) |> ungroup() |>
+  select(stock_id,date,benchmark,all_of(features)) |> arrange(date,stock_id)
+
 config <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = "linear")
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.5, max_weight = 1.0))
   ),
-  loss = sharpe_ratio_loss_keras,  # Custom Sharpe ratio loss
-  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
+  loss = list(name = "sharpe_ratio_loss", transaction_costs = 0.001,
+      delta = 0.1,
+      lambda = 0.1, # Diversification penalty multiplier
+      leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
+  metric = list(name = "sharpe_ratio_loss"),  # Custom Sharpe ratio loss
+  optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
+  metrics = list(turnover_metric, leverage_metric, diversification_metric),  # Custom metrics added here
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 50,
   batch_size = 128,
   verbose = 1,
   seeds = c(42, 123, 456),
