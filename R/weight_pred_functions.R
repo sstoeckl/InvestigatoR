@@ -48,7 +48,7 @@
 #'   layers = list(
 #'     list(type = "dense", units = 32, activation = "relu"),
 #'     list(type = "dense", units = 16, activation = "relu"),
-#'     list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.5, max_weight = 1.0))
+#'     list(type = "dense", units = 1, activation = "linear")
 #'   ),
 #'   loss = list(name = "sharpe_ratio_loss", transaction_costs = 0.001,
 #'       delta = 0.1,
@@ -113,10 +113,9 @@ keras_weights <- function(train_data, test_data, config = list()) {
     # seed<- 3 # for testing
     keras3::set_random_seed(seed) # Set seed for reproducibility
     # Build the model from the config
-    model <- keras_model_sequential()
-
     # First, add the input layer explicitly using layer_input
     if (tensorflow::tf_version() < "2.11") { # not sure about the exact number
+      model <- keras_model_sequential()
       model %>%
         layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation, input_shape = list(input_shape),
                     kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
@@ -124,8 +123,8 @@ keras_weights <- function(train_data, test_data, config = list()) {
                     bias_initializer = config$layers[[1]]$bias_initializer %||% NULL,
                     kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
     } else {
+      model <- keras_model_sequential(input_shape = list(input_shape))
       model %>%
-        layer_input(shape = c(input_shape)) %>%
         layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation,
                     kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
                     kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
@@ -279,8 +278,8 @@ keras_weights <- function(train_data, test_data, config = list()) {
 sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0.1, leverage = 1.0, eta = 0.1) {
   function(y_true, y_pred) {
     # Extract stock_id, date, and actual_return from y_true
-    stock_ids <- k_cast(y_true[, 1], "int32")
-    dates <- k_cast(y_true[, 2], "int32")
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
     actual_returns <- y_true[, 4]
 
     # Get unique stock_id and date vectors for reshaping
@@ -288,51 +287,70 @@ sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0
     unique_dates <- tf$unique(dates)$y
 
     # Determine the number of unique stocks and dates
-    num_dates <- k_shape(unique_dates)[1]
-    num_stocks <- k_shape(unique_stock_ids)[1]
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
 
-    # Get the indices for stock_id and date in the unique lists
-    stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
-    date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+    # Get the indices for stock_id and date in the unique lists using argmax
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates
+    )
 
-    # Stack the indices tensor for scatter_nd
-    indices <- k_stack(list(date_indices, stock_indices), axis = -1)
-    indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+    # Print the shapes to debug
+    #tf$print("Shape of actual_returns before reshape:", tf$shape(actual_returns))
+    actual_returns <- tf$reshape(actual_returns, shape = list(-1L))  # Flatten to 1D
+    #tf$print("Shape of actual_returns after reshape:", tf$shape(actual_returns))
 
-    # Reshape actual_returns and y_pred to be compatible with the indices
-    actual_returns <- k_reshape(actual_returns, shape = c(-1))  # Flatten actual_returns to be a vector
-    y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+    #tf$print("Shape of y_pred before reshape:", tf$shape(y_pred))
+    y_pred <- tf$reshape(y_pred, shape = list(-1L))  # Flatten to 1D
+    #tf$print("Shape of y_pred after reshape:", tf$shape(y_pred))
 
-    # Scatter the actual returns and predicted weights into the tensors
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Print indices shape to verify it has [N, 2] shape
+    #tf$print("Shape of stock_indices:", tf$shape(stock_indices))
+    #tf$print("Shape of date_indices:", tf$shape(date_indices))
+    #tf$print("Shape of indices:", tf$shape(indices))
+
+    # Scatter the actual returns and predicted weights into tensors
     stock_returns_tensor <- tf$scatter_nd(indices, actual_returns, shape = list(num_dates, num_stocks))
     weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
 
+    # Ensure the scatter operation produces correct tensors
+    #tf$print("Shape of stock_returns_tensor:", tf$shape(stock_returns_tensor))
+    #tf$print("Shape of weights_tensor:", tf$shape(weights_tensor))
+
     # Apply weight normalization based on the sum of absolute weights
-    weight_sum_per_date <- k_sum(k_abs(weights_tensor), axis = -1, keepdims = TRUE)
-    normalized_weights <- weights_tensor / (weight_sum_per_date + k_epsilon())
+    weight_sum_per_date <- tf$reduce_sum(tf$abs(weights_tensor), axis = -1L, keepdims = TRUE)
+    normalized_weights <- weights_tensor / (weight_sum_per_date + tf$constant(.Machine$double.eps, dtype = "float32"))
 
     # Calculate portfolio returns as the sum of weighted stock returns per date
-    portfolio_returns <- k_sum(normalized_weights * stock_returns_tensor, axis = -1)
+    portfolio_returns <- tf$reduce_sum(normalized_weights * stock_returns_tensor, axis = -1L)
 
     # Calculate turnover: absolute change in weights from one time step to the next
-    zero_weights <- k_zeros_like(normalized_weights[1, , drop = FALSE])
+    zero_weights <- tf$zeros_like(normalized_weights[1:1, ])
     padded_weights <- tf$concat(list(zero_weights, normalized_weights[1:(num_dates - 1), ]), axis = 0L)
-    weight_differences <- tf$concat(list(zero_weights,(k_abs(normalized_weights - padded_weights))[2:num_dates,]), axis = 0L)
-    turnover <- k_sum(weight_differences, axis = -1)
+    weight_differences <- tf$abs(normalized_weights - padded_weights)
+    turnover <- tf$reduce_sum(weight_differences, axis = -1L)
 
     # Adjust portfolio returns by subtracting the turnover penalty
     adjusted_portfolio_returns <- portfolio_returns - (transaction_costs * turnover)
 
     # Calculate the Sharpe ratio
-    portfolio_return_mean <- k_mean(adjusted_portfolio_returns)
-    portfolio_return_std <- k_std(adjusted_portfolio_returns)
-    sharpe_ratio <- portfolio_return_mean / (portfolio_return_std + k_epsilon())
+    portfolio_return_mean <- tf$reduce_mean(adjusted_portfolio_returns)
+    portfolio_return_std <- tf$math$reduce_std(adjusted_portfolio_returns)
+    sharpe_ratio <- portfolio_return_mean / (portfolio_return_std + tf$constant(.Machine$double.eps, dtype = "float32"))
 
     # Diversification penalty: penalize portfolios with low diversification
-    variance_penalty <- lambda * (k_mean(k_abs(k_sum(k_square(normalized_weights), axis = -1)))- k_cast(1/num_stocks, "float32"))
+    variance_penalty <- lambda * (tf$reduce_mean(tf$abs(tf$reduce_sum(tf$square(normalized_weights), axis = -1L))) - tf$cast(1/num_stocks, "float32"))
 
     # Leverage penalty: penalize deviations from target leverage
-    leverage_penalty <- eta * k_mean(k_square(k_sum(k_abs(normalized_weights), axis = -1) - leverage))
+    leverage_penalty <- eta * tf$reduce_mean(tf$square(tf$reduce_sum(tf$abs(normalized_weights), axis = -1L) - leverage))
 
     # Total penalty combining diversification and leverage penalties
     total_penalty <- variance_penalty + leverage_penalty
@@ -343,86 +361,62 @@ sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0
     return(loss)
   }
 }
+
 # Custom Turnover Metric for Keras
 #'
 #' This function calculates and reports the portfolio turnover during training.
-#'
-#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
-#' @param y_pred Tensor. Predicted portfolio weights.
 #'
 #' @return A scalar turnover value for the current batch of data.
 #' @import keras3
 #' @import tensorflow
 #'
-#' @examples
-#' \dontrun{
-#' library(keras3)
-#' library(tensorflow)
-#'
-#' # Example: simple portfolio with 3 stocks and 2 dates
-#' example_data <- data.frame(
-#'   stock_id = c(1, 1, 2, 2, 3, 3),
-#'   date = c(1, 2, 1, 2, 1, 2),
-#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)
-#' )
-#'
-#' # Sample predicted weights
-#' predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2)
-#'
-#' # Convert data to TensorFlow tensors
-#' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
-#' y_pred <- tf$constant(predicted_weights, dtype = "float32")
-#'
-#' # Call the custom turnover metric function
-#' turnover_value <- turnover_metric(
-#'   y_true = y_true,
-#'   y_pred = y_pred
-#' )
-#'
-#' # Print the calculated turnover value
-#' print(turnover_value)
-#' }
-
 turnover_metric <- function() {
   custom_metric("turnover_metric", function(y_true, y_pred) {
-  # Extract stock_id, date, and actual_return from y_true
-  stock_ids <- k_cast(y_true[, 1], "int32")
-  dates <- k_cast(y_true[, 2], "int32")
+    # Extract stock_id, date, and actual_return from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
 
-  # Get unique stock_id and date vectors for reshaping
-  unique_stock_ids <- tf$unique(stock_ids)$y
-  unique_dates <- tf$unique(dates)$y
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
 
-  # Determine the number of unique stocks and dates
-  num_dates <- k_shape(unique_dates)[1]
-  num_stocks <- k_shape(unique_stock_ids)[1]
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[0]
+    num_stocks <- tf$shape(unique_stock_ids)[0]
 
-  # Get the indices for stock_id and date in the unique lists
-  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
-  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+    # Get the indices for stock_id and date in the unique lists
+    stock_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_stock_ids, x)), list()), "int32"),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_dates, x)), list()), "int32"),
+      dates,
+      dtype = tf$int32
+    )
 
-  # Stack the indices tensor for scatter_nd
-  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
-  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+    # Stack the indices tensor for scatter_nd
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
 
-  # Reshape y_pred to be compatible with the indices
-  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+    # Reshape y_pred to be compatible with the indices
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))  # Flatten y_pred to be a vector
 
-  # Scatter the predicted weights into the tensor
-  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+    # Scatter the predicted weights into the tensor
+    weights_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
 
-  # Apply weight normalization based on the sum of absolute weights
-  weight_sum_per_date <- k_sum(k_abs(weights_tensor), axis = -1, keepdims = TRUE)
-  normalized_weights <- weights_tensor / (weight_sum_per_date + k_epsilon())
+    # Apply weight normalization based on the sum of absolute weights
+    weight_sum_per_date <- tf$reduce_sum(tf$abs(weights_tensor), axis = -1L, keepdims = TRUE)
+    normalized_weights <- weights_tensor / (weight_sum_per_date + tf$constant(.Machine$double.eps, dtype = "float32"))
 
-  # Calculate turnover: absolute change in weights from one time step to the next
-  zero_weights <- k_zeros_like(normalized_weights[1, , drop = FALSE])
-  padded_weights <- tf$concat(list(zero_weights, normalized_weights[1:(num_dates - 1), ]), axis = 0L)
-  weight_differences <- tf$concat(list(zero_weights, (k_abs(normalized_weights - padded_weights))[2:num_dates,]), axis = 0L)
-  turnover <- k_sum(weight_differences, axis = -1)
+    # Calculate turnover: absolute change in weights from one time step to the next
+    zero_weights <- tf$zeros_like(normalized_weights[1:1, ])
+    padded_weights <- tf$concat(list(zero_weights, normalized_weights[1:(num_dates - 1), ]), axis = 0L)
+    weight_differences <- tf$abs(normalized_weights - padded_weights)
+    turnover <- tf$reduce_sum(weight_differences, axis = -1L)
 
-  # Return the mean turnover value
-  return(k_mean(turnover))
+    # Return the mean turnover value
+    tf$reduce_mean(turnover)
   })
 }
 
@@ -431,52 +425,50 @@ turnover_metric <- function() {
 #' This function calculates and reports the leverage of the portfolio during training.
 #' Leverage is defined as the sum of absolute portfolio weights for each time period.
 #'
-#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
-#' @param y_pred Tensor. Predicted portfolio weights.
-#'
 #' @return A scalar leverage value for the current batch of data.
 #' @import keras3
 #' @import tensorflow
 #'
-#' @examples
-#' \dontrun{
-#' # Example: Calculate leverage metric
-#' leverage_value <- leverage_metric(y_true, y_pred)
-#' print(leverage_value)
-#' }
 leverage_metric <- function() {
   custom_metric("leverage_metric", function(y_true, y_pred) {
-  # Extract stock_id, date, and actual_return from y_true
-  stock_ids <- k_cast(y_true[, 1], "int32")
-  dates <- k_cast(y_true[, 2], "int32")
+    # Extract stock_id and date from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
 
-  # Get unique stock_id and date vectors for reshaping
-  unique_stock_ids <- tf$unique(stock_ids)$y
-  unique_dates <- tf$unique(dates)$y
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
 
-  # Determine the number of unique stocks and dates
-  num_dates <- k_shape(unique_dates)[1]
-  num_stocks <- k_shape(unique_stock_ids)[1]
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[0]
+    num_stocks <- tf$shape(unique_stock_ids)[0]
 
-  # Get the indices for stock_id and date in the unique lists
-  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
-  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+    # Get the indices for stock_id and date in the unique lists
+    stock_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_stock_ids, x)), list()), "int32"),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_dates, x)), list()), "int32"),
+      dates,
+      dtype = tf$int32
+    )
 
-  # Stack the indices tensor for scatter_nd
-  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
-  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+    # Stack the indices tensor for scatter_nd
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
 
-  # Reshape y_pred to be compatible with the indices
-  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+    # Reshape y_pred to be compatible with the indices
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))  # Flatten y_pred to be a vector
 
-  # Scatter the predicted weights into the tensor
-  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+    # Scatter the predicted weights into the tensor
+    weights_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
 
-  # Calculate leverage: sum of absolute weights per date
-  leverage <- k_sum(k_abs(weights_tensor), axis = -1)
+    # Calculate leverage: sum of absolute weights per date
+    leverage <- tf$reduce_sum(tf$abs(weights_tensor), axis = -1L)
 
-  # Return the mean leverage value
-  return(k_mean(leverage))
+    # Return the mean leverage value
+    tf$reduce_mean(leverage)
   })
 }
 
@@ -485,79 +477,74 @@ leverage_metric <- function() {
 #' This function calculates and reports the diversification of the portfolio during training,
 #' using the Herfindahl-Hirschman Index (HHI), which is the sum of the squared portfolio weights.
 #'
-#' @param y_true Tensor. A matrix where each row contains `stock_id`, `date`, `actual_return`.
-#' @param y_pred Tensor. Predicted portfolio weights.
-#'
 #' @return A scalar diversification value (HHI) for the current batch of data.
 #' @import keras3
 #' @import tensorflow
 #'
-#' @examples
-#' \dontrun{
-#' # Example: Calculate diversification metric (HHI)
-#' diversification_value <- diversification_metric(y_true, y_pred)
-#' print(diversification_value)
-#' }
 diversification_metric <- function() {
-  custom_metric("diversification_metric", function(y_true, y_pred) {  # Extract stock_id, date, and actual_return from y_true
-  stock_ids <- k_cast(y_true[, 1], "int32")
-  dates <- k_cast(y_true[, 2], "int32")
+  custom_metric("diversification_metric", function(y_true, y_pred) {
+    # Extract stock_id and date from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
 
-  # Get unique stock_id and date vectors for reshaping
-  unique_stock_ids <- tf$unique(stock_ids)$y
-  unique_dates <- tf$unique(dates)$y
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
 
-  # Determine the number of unique stocks and dates
-  num_dates <- k_shape(unique_dates)[1]
-  num_stocks <- k_shape(unique_stock_ids)[1]
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[0]
+    num_stocks <- tf$shape(unique_stock_ids)[0]
 
-  # Get the indices for stock_id and date in the unique lists
-  stock_indices <- k_map_fn(function(x) k_cast(tf$where(unique_stock_ids == x), "int32"), stock_ids)
-  date_indices <- k_map_fn(function(x) k_cast(tf$where(unique_dates == x), "int32"), dates)
+    # Get the indices for stock_id and date in the unique lists
+    stock_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_stock_ids, x)), list()), "int32"),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$cast(tf$reshape(tf$where(tf$equal(unique_dates, x)), list()), "int32"),
+      dates,
+      dtype = tf$int32
+    )
 
-  # Stack the indices tensor for scatter_nd
-  indices <- k_stack(list(date_indices, stock_indices), axis = -1)
-  indices <- k_reshape(indices, shape = list(k_shape(y_pred)[1], 2))
+    # Stack the indices tensor for scatter_nd
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
 
-  # Reshape y_pred to be compatible with the indices
-  y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
+    # Reshape y_pred to be compatible with the indices
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))  # Flatten y_pred to be a vector
 
-  # Scatter the predicted weights into the tensor
-  weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
+    # Scatter the predicted weights into the tensor
+    weights_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
 
-  # Calculate diversification using Herfindahl-Hirschman Index (sum of squared weights)
-  hhi <- k_sum(k_square(weights_tensor), axis = -1)
+    # Calculate diversification using Herfindahl-Hirschman Index (sum of squared weights)
+    hhi <- tf$reduce_sum(tf$square(weights_tensor), axis = -1L)
 
-  # Return the mean diversification (HHI) value
-  return(k_mean(hhi))
+    # Return the mean diversification (HHI) value
+    tf$reduce_mean(hhi)
   })
 }
 
-
-#' Dummy MSE Loss Function with Stock ID, Date, and Actual Return
+# Dummy MSE Loss Function with Stock ID, Date, and Actual Return
 #'
-#' This function calculates the Mean Squared Error (MSE) between the actual returns (from column 3 of y_true)
+#' This function calculates the Mean Squared Error (MSE) between the actual returns (from column 4 of y_true)
 #' and the predicted values (y_pred). It is used as a dummy function for debugging the custom loss function
 #' input structure.
 #'
-#' @param y_true A matrix where the 3rd column contains the actual returns.
+#' @param y_true A matrix where the 4th column contains the actual returns.
 #' @param y_pred A vector of predicted portfolio weights/returns.
 #'
 #' @return The calculated MSE loss value.
+#' @import tensorflow
+#'
 dummy_mse_loss <- function(y_true, y_pred) {
-  # Extract the actual returns from the 3rd column of y_true
-  stock_ids <- tf$cast(y_true[, 1], dtype = "int32")
-  dates <- tf$cast(y_true[, 2], dtype = "int32")
+  # Extract the actual returns from the 4th column of y_true
   actual_returns <- y_true[, 4]
-  benchmark <- y_true[, 3]
 
   # Calculate Mean Squared Error (MSE)
-  #mse <- tf$reduce_mean(tf$square(actual_returns - y_pred))
-  mse <- k_mean(k_square(actual_returns - y_pred))
+  mse <- tf$reduce_mean(tf$square(actual_returns - y_pred))
 
   return(mse)
 }
-
 
 ########################### ACTIVATIONS
 #' Box Constraints Activation with Sigmoid Scaling
@@ -595,7 +582,7 @@ dummy_mse_loss <- function(y_true, y_pred) {
 activation_box_sigmoid <- function(min_weight = -1.0, max_weight = 1.0) {
   function(x) {
     # Map to the desired range using sigmoid
-    x_mapped <- min_weight + (max_weight - min_weight) * k_sigmoid(x)
+    x_mapped <- min_weight + (max_weight - min_weight) * op_sigmoid(x)
     return(x_mapped)
   }
 }
@@ -634,7 +621,7 @@ activation_box_sigmoid <- function(min_weight = -1.0, max_weight = 1.0) {
 activation_box_tanh <- function(min_weight = -1.0, max_weight = 1.0) {
   function(x) {
     # Map to the desired range using sigmoid
-    x_mapped <- min_weight + (max_weight - min_weight) * k_tanh(x)
+    x_mapped <- min_weight + (max_weight - min_weight) * op_tanh(x)
     return(x_mapped)
   }
 }
@@ -676,9 +663,9 @@ activation_box_tanh <- function(min_weight = -1.0, max_weight = 1.0) {
 activation_box_sum_sigmoid <- function(min_weight = -1.0, max_weight = 1.0, target_sum = 0) {
   function(x) {
     # Map to the desired range using sigmoid
-    x_mapped <- min_weight + (max_weight - min_weight) * k_sigmoid(x)
+    x_mapped <- min_weight + (max_weight - min_weight) * op_sigmoid(x)
     # Normalize the weights to ensure they sum to target_sum
-    weight_sum <- k_sum(x_mapped, axis = -1, keepdims = TRUE)
+    weight_sum <- op_sum(x_mapped, axis = -1, keepdims = TRUE)
     return(x_mapped - weight_sum + target_sum)
   }
 }
@@ -718,9 +705,9 @@ activation_box_sum_sigmoid <- function(min_weight = -1.0, max_weight = 1.0, targ
 activation_sum_sigmoid <- function(target_sum = 0.0) {
   function(x) {
     # Map to the desired range using sigmoid
-    x_mapped <- k_sigmoid(x)
+    x_mapped <- op_sigmoid(x)
     # Normalize the weights to ensure they sum to target_sum
-    weight_sum <- k_sum(x_mapped, axis = -1, keepdims = TRUE)
+    weight_sum <- op_sum(x_mapped, axis = -1, keepdims = TRUE)
     return(x_mapped - weight_sum + target_sum)
   }
 }

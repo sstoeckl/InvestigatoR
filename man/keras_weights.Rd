@@ -38,6 +38,8 @@ Additionally, this function can handle masking and benchmark weights, which will
 }
 \examples{
 \dontrun{
+library(keras3)
+reticulate::use_virtualenv("C:/R/python/")
 data(data_ml)
 test_data_ml <- data_ml \%>\% filter(stock_id <= 5)
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")

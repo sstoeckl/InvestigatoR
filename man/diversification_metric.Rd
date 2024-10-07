@@ -22,6 +22,19 @@ using the Herfindahl-Hirschman Index (HHI), which is the sum of the squared port
 \examples{
 \dontrun{
 # Example: Calculate diversification metric (HHI)
+#' example_data <- data.frame(
+  stock_id = c(1, 1, 2, 2, 3, 3),
+  date = c(1, 2, 1, 2, 1, 2),
+  benchmark = rep(0,6),
+  actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)
+)
+
+# Sample predicted weights
+predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2)
+
+# Convert data to TensorFlow tensors
+y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
+y_pred <- tf$constant(predicted_weights, dtype = "float32")
 diversification_value <- diversification_metric(y_true, y_pred)
 print(diversification_value)
 }
