@@ -60,9 +60,8 @@ config <- list(
       delta = 0.1,
       lambda = 0.1, # Diversification penalty multiplier
       leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
-  metric = list(name = "sharpe_ratio_loss"),  # Custom Sharpe ratio loss
   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
-  metrics = list(turnover_metric, leverage_metric, diversification_metric),  # Custom metrics added here
+  metrics = list(turnover_metric()),  # Custom metrics added here
   callbacks = list(
     callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
   ),

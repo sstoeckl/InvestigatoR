@@ -52,13 +52,12 @@
 #'       delta = 0.1,
 #'       lambda = 0.1, # Diversification penalty multiplier
 #'       leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
-#'   metric = list(name = "sharpe_ratio_loss"),  # Custom Sharpe ratio loss
 #'   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
-#'   metrics = list(turnover_metric, leverage_metric, diversification_metric),  # Custom metrics added here
+#'   metrics = list(diversification_metric(),leverage_metric(),turnover_metric()),  # Custom metrics added here
 #'   callbacks = list(
 #'     callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
 #'   ),
-#'   epochs = 50,
+#'   epochs = 10,
 #'   batch_size = 128,
 #'   verbose = 1,
 #'   seeds = c(42, 123, 456),
@@ -109,26 +108,47 @@ keras_weights <- function(train_data, test_data, config = list()) {
 
   # Function to build and train the model
   train_model <- function(seed) {
+    # seed<- 3 # for testing
     set_random_seed(seed, disable_gpu = FALSE) # Set seed for reproducibility
     # Build the model from the config
     model <- keras_model_sequential()
 
+    # First, add the input layer explicitly using layer_input
+    if (tensorflow::tf_version() < "2.11") { # not sure about the exact number
+      model %>%
+        layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation, input_shape = list(input_shape),
+                    kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
+                    kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
+                    bias_initializer = config$layers[[1]]$bias_initializer %||% NULL,
+                    kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
+    } else {
+      model %>%
+        layer_input(shape = input_shape) %>%
+        layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation,
+                    kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
+                    kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
+                    bias_initializer = config$layers[[1]]$bias_initializer %||% NULL,
+                    kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
+    }
+
     # Loop through the config and add layers dynamically
-    for (layer in config$layers) {
+    for (i in 2:length(config$layers)) {
+      layer <- config$layers[[i]]
       if (layer$type == "dense") {
-        if (length(model$layers) == 0) {
-          model %>%
-            layer_dense(units = layer$units, activation = layer$activation, input_shape = input_shape,
-                        kernel_initializer = layer$kernel_initializer %||% NULL,
-                        kernel_constraint = layer$kernel_constraint %||% NULL)
-        } else {
-          model %>%
-            layer_dense(units = layer$units, activation = layer$activation,
-                        bias_initializer = layer$bias_initializer %||% NULL,
-                        kernel_regularizer = layer$kernel_regularizer %||% NULL)
-        }
+        model %>%
+          layer_dense(
+            units = layer$units,
+            activation = layer$activation,
+            kernel_initializer = layer$kernel_initializer %||% NULL,
+            kernel_constraint = layer$kernel_constraint %||% NULL,
+            bias_initializer = layer$bias_initializer %||% NULL,
+            kernel_regularizer = layer$kernel_regularizer %||% NULL
+          )
+
+        # Add dropout layer if specified
         if (!is.null(layer$dropout)) {
-          model %>% layer_dropout(rate = layer$dropout)
+          model %>%
+            layer_dropout(rate = layer$dropout)
         }
       }
     }
@@ -386,9 +406,6 @@ turnover_metric <- function() {
   # Reshape y_pred to be compatible with the indices
   y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
 
-  # Create zero-initialized tensors for weights
-  weights_tensor <- k_zeros(c(num_dates, num_stocks))
-
   # Scatter the predicted weights into the tensor
   weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
 
@@ -450,9 +467,6 @@ leverage_metric <- function() {
   # Reshape y_pred to be compatible with the indices
   y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
 
-  # Create zero-initialized tensors for weights
-  weights_tensor <- k_zeros(c(num_dates, num_stocks))
-
   # Scatter the predicted weights into the tensor
   weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
 
@@ -505,9 +519,6 @@ diversification_metric <- function() {
 
   # Reshape y_pred to be compatible with the indices
   y_pred <- k_reshape(y_pred, shape = c(-1))  # Flatten y_pred to be a vector
-
-  # Create zero-initialized tensors for weights
-  weights_tensor <- k_zeros(c(num_dates, num_stocks))
 
   # Scatter the predicted weights into the tensor
   weights_tensor <- tf$scatter_nd(indices, y_pred, shape = list(num_dates, num_stocks))
