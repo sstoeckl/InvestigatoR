@@ -144,12 +144,6 @@ weightpred_map <- function(t, data_subset, indices, model_function, model_config
   )
 
   # Ensure the returned predictions have the correct structure
-  if (!all(c("stock_id", "date", "pred_weight") %in% colnames(weights))) {
-    cli::cli_alert_danger("Weights from '{model_function}' do not contain the required columns: 'stock_id', 'date', 'pred_weight'.")
-    stop("Invalid weights output structure.")
-  }
-
-  # Ensure the returned predictions have the correct structure
   if (!is.list(result) || !all(c("predictions", "histories") %in% names(result))) {
     cli::cli_alert_danger("Weights from '{model_function}' do not contain the required list elements: 'predictions', 'histories'.")
     stop("Invalid weights output structure.")
