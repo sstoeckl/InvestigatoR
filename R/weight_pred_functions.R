@@ -55,7 +55,7 @@
 #'       lambda = 0.1, # Diversification penalty multiplier
 #'       leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
 #'   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
-#'   metrics = list(diversification_metric(),leverage_metric(),turnover_metric()),  # Custom metrics added here
+#'   metrics = list(turnover_metric(), leverage_metric(), diversification_metric(), dummy_mse_loss ),  # Custom metrics added here
 #'   callbacks = list(
 #'     callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
 #'   ),
@@ -381,8 +381,8 @@ turnover_metric <- function() {
     unique_dates <- tf$unique(dates)$y
 
     # Determine the number of unique stocks and dates
-    num_dates <- tf$shape(unique_dates)[0]
-    num_stocks <- tf$shape(unique_stock_ids)[0]
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
 
     # Get the indices for stock_id and date in the unique lists
     stock_indices <- tf$map_fn(
@@ -440,8 +440,8 @@ leverage_metric <- function() {
     unique_dates <- tf$unique(dates)$y
 
     # Determine the number of unique stocks and dates
-    num_dates <- tf$shape(unique_dates)[0]
-    num_stocks <- tf$shape(unique_stock_ids)[0]
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
 
     # Get the indices for stock_id and date in the unique lists
     stock_indices <- tf$map_fn(
@@ -492,8 +492,8 @@ diversification_metric <- function() {
     unique_dates <- tf$unique(dates)$y
 
     # Determine the number of unique stocks and dates
-    num_dates <- tf$shape(unique_dates)[0]
-    num_stocks <- tf$shape(unique_stock_ids)[0]
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
 
     # Get the indices for stock_id and date in the unique lists
     stock_indices <- tf$map_fn(
