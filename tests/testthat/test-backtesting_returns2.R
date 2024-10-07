@@ -4,7 +4,7 @@ library(testthat)
 library(tidyverse)
 library(reticulate)
 library(tensorflow)
-library(keras)
+library(keras3)
 reticulate::use_virtualenv("C:/R/python/")
 reticulate::py_config()
 

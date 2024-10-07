@@ -27,7 +27,7 @@ LazyData: true
 RoxygenNote: 7.3.2
 Suggests:
     reticulate,
-    keras (>= 2.0),
+    keras3 (>= 3.0),
     tensorflow (>= 2.0),
     knitr,
     rmarkdown,

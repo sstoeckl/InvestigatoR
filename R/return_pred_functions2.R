@@ -21,7 +21,7 @@
 #' @param config A list containing the configuration for the Keras model, including layers, optimizer, loss function, and advanced features like callbacks.
 #'
 #' @return A tibble with `stock_id`, `date`, and averaged `pred_return` for the test data.
-#' @import keras
+#' @import keras3
 #' @importFrom tibble tibble
 #' @importFrom dplyr bind_rows
 #' @importFrom checkmate assert_data_frame assert_list

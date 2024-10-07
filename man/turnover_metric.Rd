@@ -19,7 +19,7 @@ This function calculates and reports the portfolio turnover during training.
 }
 \examples{
 \dontrun{
-library(keras)
+library(keras3)
 library(tensorflow)
 
 # Example: simple portfolio with 3 stocks and 2 dates

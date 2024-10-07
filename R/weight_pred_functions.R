@@ -21,7 +21,7 @@
 #' @param config A list containing the configuration for the Keras model, including layers, optimizer, loss function, and advanced features like callbacks.
 #'
 #' @return A tibble with `stock_id`, `date`, and predicted portfolio weights for the test data.
-#' @import keras
+#' @import keras3
 #' @importFrom tibble tibble
 #' @importFrom dplyr bind_rows
 #' @importFrom checkmate assert_data_frame assert_list
@@ -30,6 +30,8 @@
 #'
 #' @examples
 #' \dontrun{
+#' library(keras3)
+#' reticulate::use_virtualenv("C:/R/python/")
 #' data(data_ml)
 #' test_data_ml <- data_ml %>% filter(stock_id <= 5)
 #' features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
@@ -109,7 +111,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
   # Function to build and train the model
   train_model <- function(seed) {
     # seed<- 3 # for testing
-    set_random_seed(seed, disable_gpu = FALSE) # Set seed for reproducibility
+    keras3::set_random_seed(seed) # Set seed for reproducibility
     # Build the model from the config
     model <- keras_model_sequential()
 
@@ -123,7 +125,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
                     kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
     } else {
       model %>%
-        layer_input(shape = input_shape) %>%
+        layer_input(shape = c(input_shape)) %>%
         layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation,
                     kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
                     kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
@@ -236,12 +238,12 @@ keras_weights <- function(train_data, test_data, config = list()) {
 #' @param eta Numeric. Leverage penalty multiplier (default: 0.1).
 #'
 #' @return A scalar loss value that combines the negative Sharpe ratio with penalties for turnover, diversification, and leverage.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #'
 #' @examples
 #' \dontrun{
-#' library(keras)
+#' library(keras3)
 #' library(tensorflow)
 #'
 #' # Example: simple portfolio with 3 stocks and 2 dates
@@ -349,12 +351,12 @@ sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0
 #' @param y_pred Tensor. Predicted portfolio weights.
 #'
 #' @return A scalar turnover value for the current batch of data.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #'
 #' @examples
 #' \dontrun{
-#' library(keras)
+#' library(keras3)
 #' library(tensorflow)
 #'
 #' # Example: simple portfolio with 3 stocks and 2 dates
@@ -433,7 +435,7 @@ turnover_metric <- function() {
 #' @param y_pred Tensor. Predicted portfolio weights.
 #'
 #' @return A scalar leverage value for the current batch of data.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #'
 #' @examples
@@ -487,7 +489,7 @@ leverage_metric <- function() {
 #' @param y_pred Tensor. Predicted portfolio weights.
 #'
 #' @return A scalar diversification value (HHI) for the current batch of data.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #'
 #' @examples

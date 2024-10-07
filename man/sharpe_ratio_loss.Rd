@@ -36,7 +36,7 @@ with penalties for turnover, lack of diversification, and leverage deviations.
 }
 \examples{
 \dontrun{
-library(keras)
+library(keras3)
 library(tensorflow)
 
 # Example: simple portfolio with 3 stocks and 2 dates

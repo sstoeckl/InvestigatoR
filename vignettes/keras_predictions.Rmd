@@ -60,7 +60,7 @@ Here’s how to define and use a basic neural network for return prediction.
 ```{r}
 library(reticulate)
 library(tensorflow)
-library(keras)
+library(keras3)
 library(reticulate)
 library(tensorflow)
 reticulate::use_virtualenv("C:/R/python/")
