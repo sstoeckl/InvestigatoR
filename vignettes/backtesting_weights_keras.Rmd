@@ -28,7 +28,7 @@ library(InvestigatoR)
 library(reticulate)
 library(tensorflow)
 library(keras3)
-reticulate::use_virtualenv("C:/R/python_36/")
+reticulate::use_virtualenv("../python/")
 # check for python availability and whether modules are installed
 reticulate::py_config()  
 reticulate::py_module_available("tensorflow")
