@@ -7,4 +7,5 @@
   conflict_prefer("%<-%", "keras3")
   conflict_prefer("train", "caret")
   conflict_prefer("filter", "dplyr")
+  conflict_prefer("matches","dplyr")
 }

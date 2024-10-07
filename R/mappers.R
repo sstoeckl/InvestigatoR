@@ -135,7 +135,7 @@ weightpred_map <- function(t, data_subset, indices, model_function, model_config
     dplyr::select(-all_of(return_label))  # Assuming 'return_label' is defined in the parent scope
 
   # Invoke the weight prediction function
-  weights <- tryCatch(
+  result <- tryCatch(
     weight_function(train_data, test_data, model_config),
     error = function(e) {
       cli::cli_alert_danger("Error in '{model_function}': {e$message}")
@@ -149,5 +149,17 @@ weightpred_map <- function(t, data_subset, indices, model_function, model_config
     stop("Invalid weights output structure.")
   }
 
-  return(weights)
+  # Ensure the returned predictions have the correct structure
+  if (!is.list(result) || !all(c("predictions", "histories") %in% names(result))) {
+    cli::cli_alert_danger("Weights from '{model_function}' do not contain the required list elements: 'predictions', 'histories'.")
+    stop("Invalid weights output structure.")
+  }
+
+  # Further validate predictions
+  if (!all(c("stock_id", "date", "pred_weight") %in% colnames(result$predictions))) {
+    cli::cli_alert_danger("Predictions from '{model_function}' do not contain the required columns: 'stock_id', 'date', 'pred_weight'.")
+    stop("Invalid predictions output structure.")
+  }
+
+  return(result$predictions)
 }

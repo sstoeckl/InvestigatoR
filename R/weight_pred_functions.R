@@ -50,10 +50,13 @@
 #'     list(type = "dense", units = 16, activation = "relu"),
 #'     list(type = "dense", units = 1, activation = "linear")
 #'   ),
-#'   loss = list(name = "sharpe_ratio_loss", transaction_costs = 0.001,
-#'       delta = 0.1,
-#'       lambda = 0.1, # Diversification penalty multiplier
-#'       leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
+#'   loss = list(name = "sharpe_ratio_loss",
+#'       transaction_costs = 0.001, # prevent too much turnover
+#'       delta = 0.1,               # Diversification target
+#'       lambda = 0.1,              # Diversification penalty multiplier
+#'       leverage = 1.0,            # Target leverage
+#'       eta = 0                  # Leverage penalty multiplier
+#'       ),  # Custom Sharpe ratio loss
 #'   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
 #'   metrics = list(turnover_metric(), leverage_metric(), diversification_metric(), dummy_mse_loss ),  # Custom metrics added here
 #'   callbacks = list(
@@ -63,7 +66,8 @@
 #'   batch_size = 128,
 #'   verbose = 1,
 #'   seeds = c(42, 123, 456),
-#'   plot_training = TRUE
+#'   plot_training = TRUE,
+#'   plot_result = TRUE
 #' )
 #' weights <- keras_weights(train_data_ex, test_data_ex, config)
 #' print(weights)
@@ -83,6 +87,9 @@ keras_weights <- function(train_data, test_data, config = list()) {
     stop("The 'tensorflow' module is not available in the current Python environment. Please install TensorFlow.")
   }
 
+  # for debugging purposes:
+  # train_data <- train_data_ex
+  # test_data <- test_data_ex
   # Input validation
   checkmate::assert_data_frame(train_data, min.rows = 1, any.missing = FALSE)
   checkmate::assert_data_frame(test_data, min.rows = 1, any.missing = FALSE)
@@ -193,14 +200,21 @@ keras_weights <- function(train_data, test_data, config = list()) {
       plot(history)
     }
 
-    return(model)
+    return(list(model = model, history = history))
   }
 
   # Perform predictions for each seed
+
+  histories <- list()
+
   prediction_list <- lapply(seeds, function(seed) {
-    model <- train_model(seed)  # Train the model
+    train_result <- train_model(seed)  # Train the model
+    model <- train_result$model
+    history <- train_result$history
+    histories[[as.character(seed)]] <<- history  # Store history with seed as name
+
     # Predict with maximum batch size for faster predictions
-    predictions <- model %>% predict(test_x, batch_size = length(test_x), verbose = 0)
+    predictions <- model %>% predict(test_x, batch_size = nrow(test_x), verbose = 0)
     return(as.vector(predictions))  # Return predictions as a vector
   })
 
@@ -220,7 +234,67 @@ keras_weights <- function(train_data, test_data, config = list()) {
 
   cli::cli_alert_info("Keras model weight prediction completed.")
 
-  return(predictions)
+  return_list <- list(
+    predictions = predictions,
+    histories = histories
+  )
+
+
+  # Check if plot_result is TRUE to generate summary table and combined plots
+  if (isTRUE(config$plot_result)) {
+    # Load necessary libraries
+
+    # Function to convert history object to a tidy dataframe
+    history_to_df <- function(history, seed) {
+      # Extract metrics from history
+      metrics <- as.data.frame(history$metrics)
+      metrics$epoch <- 1:nrow(metrics)
+      metrics_long <- pivot_longer(metrics, cols = -epoch, names_to = "metric", values_to = "value")
+      metrics_long$seed <- seed
+      return(metrics_long)
+    }
+
+    # Convert all histories to a single dataframe
+    histories_df <- purrr::imap_dfr(histories, history_to_df)
+
+    # Determine the maximum number of epochs across all seeds
+    max_epochs <- max(histories_df$epoch)
+
+    # Pad each seed's metrics up to max_epochs by carrying forward the last value
+    histories_padded <- histories_df %>%
+      group_by(seed, metric) %>%
+      tidyr::complete(epoch = 1:max_epochs) %>%
+      arrange(seed, metric, epoch) %>%
+      tidyr::fill(value, .direction = "down") %>%
+      ungroup()
+
+    # Create the combined plot
+    combined_plot <- ggplot(histories_padded, aes(x = epoch, y = value, color = as.factor(seed))) +
+      geom_line(alpha = 0.7, lwd=1.2) +
+      facet_wrap(~ metric, scales = "free_y", ncol = 2) +
+      labs(
+        title = "Training Metrics Across Seeds",
+        x = "Epoch",
+        y = "Metric Value",
+        color = "Seed"
+      ) +
+      theme_dark() +
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10)
+      )
+
+    # Display the combined plot
+    print(combined_plot)
+
+    # Add the combined plot to the return list
+    return_list$combined_plot <- combined_plot
+  }
+
+  return(return_list)
 }
 
 #' Custom Sharpe Ratio Loss Function for Keras

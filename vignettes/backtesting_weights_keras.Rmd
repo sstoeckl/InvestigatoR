@@ -36,6 +36,7 @@ reticulate::py_module_available("keras")
 library(dplyr)
 library(tibble)
 library(PerformanceAnalytics)
+data("data_ml")
 ```
 
 # Introduction
@@ -66,14 +67,47 @@ config_keras_simple <- list(
   ),
   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
   epochs = 10,
-  verbose = 0,
-  seeds = c(42, 123, 456) # set random seeds to average over results
+  verbose = 1,
+  seeds = c(42, 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = TRUE,
+  plot_result = TRUE
 )
 ```
 
 ### Explanation
 
 This simple model will help us understand how a neural network allocates portfolio weights based purely on the input data, without any additional constraints or penalties.
+
+### Running the first Backtest
+
+```{r portfolio_config}
+# Define portfolio config with all Keras models
+pf_config1 <- list(
+  keras_weights_simple = list(
+    weight_func = "keras_weights",
+    config1 = config_keras_simple
+  )
+)
+```
+
+We now run the backtest using the Keras model we defined above and evaluate their performance based on Sharpe ratios, turnover, diversification, and leverage.
+
+```{r run_backtest}
+# Run the backtest with #1st Keras configurations
+keras_portfolios <- backtesting_weights(
+  data = data_ml, 
+  return_label = "R1M_Usd", 
+  features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"), 
+  pf_config = pf_config1,  # Portfolio config with multiple Keras configurations
+  rolling = TRUE, 
+  window_size = "5 years", 
+  step_size = "1 year", 
+  offset = "1 month", 
+  in_sample = TRUE, 
+  num_cores = 20, 
+  verbose = TRUE
+)
+```
 
 ---
 
