@@ -4,7 +4,7 @@
 \alias{weightpred_map}
 \title{Weight Prediction Mapping Function (Helper)}
 \usage{
-weightpred_map(t, data_subset, indices, model_function, model_config)
+weightpred_map(t, data_subset, indices, mask, model_function, model_config)
 }
 \arguments{
 \item{t}{Integer. Index of the current iteration.}
@@ -12,6 +12,8 @@ weightpred_map(t, data_subset, indices, model_function, model_config)
 \item{data_subset}{Tibble. Subset of the data containing \code{stock_id}, \code{date}, \code{return_label}, features, and any optional benchmark/masking data.}
 
 \item{indices}{Tibble. Contains \code{training_start}, \code{training_end}, \code{prediction_start}, and \code{prediction_end} dates.}
+
+\item{mask}{Tibble. \code{stock_id}-\code{date} combinations in \code{data_subset} that are part of the index. Will be filtered}
 
 \item{model_function}{Character. Name of the weight prediction function to be invoked.}
 

@@ -2,12 +2,12 @@
 % Please edit documentation in R/weight_pred_functions.R
 \name{keras_weights}
 \alias{keras_weights}
-\title{Keras Weight Prediction Function with Masking and Benchmark Handling}
+\title{Keras Weight Prediction Function with Benchmark Handling}
 \usage{
 keras_weights(train_data, test_data, config = list())
 }
 \arguments{
-\item{train_data}{A data frame with columns: \code{stock_id}, \code{date}, \code{benchmark}, \code{mask}, \code{actual_return}, and features.}
+\item{train_data}{A data frame with columns: \code{stock_id}, \code{date}, \code{benchmark}, \code{actual_return}, and features.}
 
 \item{test_data}{A data frame with columns: \code{stock_id}, \code{date}, and features.}
 
@@ -19,7 +19,7 @@ A tibble with \code{stock_id}, \code{date}, and predicted portfolio weights for 
 \description{
 This function trains a Keras neural network to predict portfolio weights based on the provided training data.
 The Keras model structure is passed in the \code{config} argument, and you can define custom layers, optimizers, loss functions, and callbacks (like early stopping).
-Additionally, this function can handle masking and benchmark weights, which will be passed to the loss function as part of \code{y_true}.
+Additionally, this function can handle benchmark weights, which will be passed to the loss function as part of \code{y_true}.
 }
 \details{
 \subsection{Config Structure}{
@@ -41,7 +41,7 @@ Additionally, this function can handle masking and benchmark weights, which will
 library(keras3)
 reticulate::use_virtualenv("C:/R/python/")
 data(data_ml)
-test_data_ml <- data_ml \%>\% filter(stock_id <= 5)
+test_data_ml <- data_ml \%>\% filter(stock_id <= 29)
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
 train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |>
   group_by(date) |>
@@ -56,14 +56,17 @@ config <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.5, max_weight = 1.0))
+    list(type = "dense", units = 1, activation = "linear")
   ),
-  loss = list(name = "sharpe_ratio_loss", transaction_costs = 0.001,
-      delta = 0.1,
-      lambda = 0.1, # Diversification penalty multiplier
-      leverage = 1.0, eta = 0.1),  # Custom Sharpe ratio loss
+  loss = list(name = "sharpe_ratio_loss",
+      transaction_costs = 0.001, # prevent too much turnover
+      delta = 0.1,               # Diversification target
+      lambda = 0.1,              # Diversification penalty multiplier
+      leverage = 1.0,            # Target leverage
+      eta = 0                  # Leverage penalty multiplier
+      ),  # Custom Sharpe ratio loss
   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
-  metrics = list(diversification_metric(),leverage_metric(),turnover_metric()),  # Custom metrics added here
+  metrics = list(turnover_metric(), leverage_metric(), diversification_metric(), dummy_mse_loss ),  # Custom metrics added here
   callbacks = list(
     callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
   ),
@@ -71,7 +74,8 @@ config <- list(
   batch_size = 128,
   verbose = 1,
   seeds = c(42, 123, 456),
-  plot_training = TRUE
+  plot_training = TRUE,
+  plot_result = TRUE
 )
 weights <- keras_weights(train_data_ex, test_data_ex, config)
 print(weights)

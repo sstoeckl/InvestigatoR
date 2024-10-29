@@ -2,36 +2,45 @@
 % Please edit documentation in R/portfolio_objects.R
 \name{add_weight_model}
 \alias{add_weight_model}
-\title{Add weight model and predictions to portfolioReturns S3 object}
+\title{Add a Weight Model to a portfolioReturns Object}
 \usage{
-add_weight_model(portfolio_object, model_name, weight_config, new_weights)
+add_weight_model(
+  portfolio_object,
+  model_name,
+  new_weights,
+  config,
+  postprocessing_config = NULL
+)
 }
 \arguments{
-\item{portfolio_object}{A portfolioReturns object.}
+\item{portfolio_object}{An existing \code{portfolioReturns} object.}
 
-\item{model_name}{Name of the weight prediction model.}
+\item{model_name}{A string specifying the name of the new weight model.}
 
-\item{weight_config}{Configuration for the model.}
-
-\item{new_weights}{Data frame containing stock_id, date, and the new weights.}
+\item{new_weights}{A tibble or data frame containing the new weights with columns \code{date}, \code{stock_id}, and \code{weight}.}
 }
 \value{
-Updated portfolioReturns S3 object with added weight model and performance data.
+An updated \code{portfolioReturns} object with the new weight model added.
 }
 \description{
-Add weight model and predictions to portfolioReturns S3 object
+Adds a new weight model to an existing \code{portfolioReturns} object. Handles both benchmark and non-benchmark portfolios by adjusting weights and updating portfolio returns accordingly.
 }
 \examples{
 \dontrun{
-data <- tibble::tibble(
-  stock_id = 1:100,
-  date = rep(Sys.Date(), 100),
-  returns=runif(100),
-  weights = runif(100)
+# Adding a weight model to a non-benchmark portfolio
+portfolio_obj <- add_weight_model(
+  portfolio_object = portfolio_obj,
+  model_name = "Model_A",
+  new_weights = new_weights_df
 )
-return_label <- "returns"
-pf <- create_portfolios(data, return_label)
-pf <- add_weight_model(pf, "keras_weights", list(epochs = 50), data |> select(-returns))
-print(pf)
+
+# Adding a weight model to a benchmark portfolio
+portfolio_obj_bm <- add_weight_model(
+  portfolio_object = portfolio_obj_bm,
+  model_name = "Model_B",
+  new_weights = new_weights_bm_df,
+  benchmark_weights = benchmark_weights_df
+)
 }
+
 }

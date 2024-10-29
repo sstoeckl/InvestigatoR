@@ -5,6 +5,8 @@
 #' @param t Integer. Index of the current iteration.
 #' @param data_subset Tibble. Subset of the data containing `stock_id`, `date`, `return_label`, and features.
 #' @param indices Tibble. Contains `training_start`, `training_end`, `prediction_start`, and `prediction_end` dates.
+#' @param mask Tibble. `stock_id`-`date` combinations in `data_subset` that are part of the index. Will be filtered
+#' at `training_end` date to include exactly those stocks that are part of the index at training-date.
 #' @param model_function Character. Name of the prediction (model) function to be invoked.
 #' @param model_config List. Configuration parameters for the model function.
 #'
@@ -32,10 +34,12 @@ retpred_map <- function(t, data_subset, indices, model_function, model_config){
 
   # Set training and test data
   train_data <- data_subset %>%
-    dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t])
+    dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t]) %>%
+    dplyr::right_join(mask %>%  filter(date==indices$training_end[t]), by = c("stock_id")) # only include index stocks at training date for training
   return_label <- colnames(data_subset)[4]  # The return label is in the third
   test_data <- data_subset %>%
     dplyr::filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]) %>%
+    dplyr::right_join(mask %>%  filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]), by = c("stock_id","date")) # only include index stocks for prediction
     dplyr::select(-all_of(return_label))  # Assuming 'return_label' is defined in the parent scope
 
   # Invoke the training function
@@ -63,6 +67,7 @@ retpred_map <- function(t, data_subset, indices, model_function, model_config){
 #' @param t Integer. Index of the current iteration.
 #' @param data_subset Tibble. Subset of the data containing `stock_id`, `date`, `return_label`, features, and any optional benchmark/masking data.
 #' @param indices Tibble. Contains `training_start`, `training_end`, `prediction_start`, and `prediction_end` dates.
+#' @param mask Tibble. `stock_id`-`date` combinations in `data_subset` that are part of the index. Will be filtered
 #' @param model_function Character. Name of the weight prediction function to be invoked.
 #' @param model_config List. Configuration parameters for the model function.
 #'
@@ -111,7 +116,7 @@ retpred_map <- function(t, data_subset, indices, model_function, model_config){
 #' print(weights)
 #' }
 #' @export
-weightpred_map <- function(t, data_subset, indices, model_function, model_config){
+weightpred_map <- function(t, data_subset, indices, mask, model_function, model_config){
   # Input Validation using checkmate
   checkmate::assert_numeric(t, lower = 1, upper = nrow(indices), len = 1, .var.name = "t")
   checkmate::assert_string(model_function, .var.name = "model_function")
@@ -128,10 +133,12 @@ weightpred_map <- function(t, data_subset, indices, model_function, model_config
 
   # Set training and test data
   train_data <- data_subset %>%
-    dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t])
-  return_label <- colnames(data_subset)[4]  # The return label is in the third
+    dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t]) %>%
+    dplyr::right_join(mask %>%  filter(date==indices$training_end[t]), by = c("stock_id","date")) # only include index stocks at training date for training
+  return_label <- colnames(data_subset)[3]  # The return label is in the third
   test_data <- data_subset %>%
     dplyr::filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]) %>%
+    dplyr::right_join(mask %>%  filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]), by = c("stock_id","date")) %>% # only include index stocks for prediction
     dplyr::select(-all_of(return_label))  # Assuming 'return_label' is defined in the parent scope
 
   # Invoke the weight prediction function

@@ -2,12 +2,14 @@
 % Please edit documentation in R/weight_pred_functions.R
 \name{dummy_mse_loss}
 \alias{dummy_mse_loss}
-\title{Dummy MSE Loss Function with Stock ID, Date, and Actual Return}
+\title{This function calculates the Mean Squared Error (MSE) between the actual returns (from column 4 of y_true)
+and the predicted values (y_pred). It is used as a dummy function for debugging the custom loss function
+input structure.}
 \usage{
 dummy_mse_loss(y_true, y_pred)
 }
 \arguments{
-\item{y_true}{A matrix where the 3rd column contains the actual returns.}
+\item{y_true}{A matrix where the 4th column contains the actual returns.}
 
 \item{y_pred}{A vector of predicted portfolio weights/returns.}
 }
@@ -15,28 +17,7 @@ dummy_mse_loss(y_true, y_pred)
 The calculated MSE loss value.
 }
 \description{
-This function calculates the Mean Squared Error (MSE) between the actual returns (from column 3 of y_true)
+This function calculates the Mean Squared Error (MSE) between the actual returns (from column 4 of y_true)
 and the predicted values (y_pred). It is used as a dummy function for debugging the custom loss function
 input structure.
-}
-\examples{
-\dontrun{
-# Example: Calculate dummy MSE loss
-example_data <- data.frame(
-  stock_id = c(1, 1, 2, 2, 3, 3),
-  date = c(1, 2, 1, 2, 1, 2),
-  benchmark = rep(0,6),
-  actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)
-)
-
-# Sample predicted weights
-predicted_weights <- c(0.5, 0.6, 0.3, 0.2, 0.2, 0.2)
-
-# Convert data to TensorFlow tensors
-y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
-y_pred <- tf$constant(predicted_weights, dtype = "float32")
-mse_loss <- dummy_mse_loss(y_true, y_pred)
-print(mse_loss)
-}
-
 }

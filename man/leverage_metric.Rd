@@ -7,22 +7,10 @@ Leverage is defined as the sum of absolute portfolio weights for each time perio
 \usage{
 leverage_metric()
 }
-\arguments{
-\item{y_true}{Tensor. A matrix where each row contains \code{stock_id}, \code{date}, \code{actual_return}.}
-
-\item{y_pred}{Tensor. Predicted portfolio weights.}
-}
 \value{
 A scalar leverage value for the current batch of data.
 }
 \description{
 This function calculates and reports the leverage of the portfolio during training.
 Leverage is defined as the sum of absolute portfolio weights for each time period.
-}
-\examples{
-\dontrun{
-# Example: Calculate leverage metric
-leverage_value <- leverage_metric(y_true, y_pred)
-print(leverage_value)
-}
 }

@@ -5,7 +5,7 @@
 #'
 #' @param data Data frame in long format containing stock IDs, dates, and features.
 #' @param return_label Column name of the actual return.
-#' @param benchmark_weights Column name of the benchmark weights (optional).
+#' @param benchmark_label Column name of the benchmark weights (optional).
 #' @param mask_label Column name of the mask indicator (optional).
 #' @param features Character vector of feature names used for weight prediction.
 #' @param pf_config List of portfolio configuration options, including model configurations.
@@ -75,7 +75,7 @@
 #' print(portfolio)
 #' }
 #' @export
-backtesting_weights <- function(data, return_label, benchmark_weights = NULL, mask_label = NULL, features, pf_config,
+backtesting_weights <- function(data, return_label, benchmark_label = NULL, mask_label = NULL, features, pf_config,
                                 portfolio_object = NULL,
                                 rolling = TRUE, window_size = "5 years", step_size = "1 month",
                                 offset = "1 month", in_sample = TRUE, num_cores = NULL, verbose = FALSE) {
@@ -90,8 +90,8 @@ backtesting_weights <- function(data, return_label, benchmark_weights = NULL, ma
   checkmate::assert_character(features, min.len = 1, .var.name = "features")
   checkmate::assert_list(pf_config, .var.name = "pf_config")
 
-  if (!is.null(benchmark_weights)) {
-    checkmate::assert_string(benchmark_weights, .var.name = "benchmark_weights")
+  if (!is.null(benchmark_label)) {
+    checkmate::assert_string(benchmark_label, .var.name = "benchmark_label")
   }
 
   if (!is.null(mask_label)) {
@@ -108,33 +108,43 @@ backtesting_weights <- function(data, return_label, benchmark_weights = NULL, ma
 
   # If no portfolio_object is provided, create a new one
   if (is.null(portfolio_object)) {
-    portfolio_object <- create_portfolios(data, return_label)
-    if (verbose) {
-      cli::cli_alert_info("Created new portfolio object.")
+    if (!is.null(benchmark_label)) {
+      portfolio_object <- create_portfolioReturns(data, return_label, benchmark_label)
+      if (verbose) {
+        cli::cli_alert_info("Created new portfolio object with benchmark.")
+      }
+    } else {
+      portfolio_object <- create_portfolioReturns(data, return_label)
+      if (verbose) {
+        cli::cli_alert_info("Created new portfolio object without benchmark.")
+      }
     }
   }
 
   # Prepare data for post-processing
   if (is.null(mask_label)) {
     data_post <- data %>% dplyr::mutate(mask = 1) %>%
-      dplyr::select(stock_id, date, !!benchmark_weights, dplyr::all_of(return_label), dplyr::all_of(features), mask)
+      dplyr::select(stock_id, date, !!benchmark_label, dplyr::all_of(return_label), dplyr::all_of(features), mask)
   } else {
     data_post <- data %>% dplyr::rename(mask = !!mask_label) %>%
-      dplyr::select(stock_id, date, !!benchmark_weights, dplyr::all_of(return_label), dplyr::all_of(features), mask)
+      dplyr::select(stock_id, date, !!benchmark_label, dplyr::all_of(return_label), dplyr::all_of(features), mask)
   }
 
   # Prepare data to include only necessary columns
-  if (is.null(benchmark_weights)) {
-    data_subset <- data_post %>% dplyr::mutate(benchmark_weights = 0) %>%
-      dplyr::select(stock_id, date, benchmark_weights, dplyr::all_of(return_label), dplyr::all_of(features))
+  if (is.null(benchmark_label)) {
+    data_subset <- data_post %>% dplyr::mutate(benchmark_label = 0) %>%
+      dplyr::select(stock_id, date, benchmark_label, dplyr::all_of(return_label), everything())
   } else {
-    data_subset <- data %>%
-      dplyr::select(stock_id, date, benchmark_weights = !!benchmark_weights, dplyr::all_of(return_label), dplyr::all_of(features))
+    data_subset <- data_post %>%
+      dplyr::select(stock_id, date, benchmark_label = !!benchmark_label, dplyr::all_of(return_label), everything())
   }
 
   # Extract dates and set rolling window indices
   dates <- data %>% dplyr::distinct(date) %>% dplyr::arrange(date) %>% dplyr::pull(date)
   indices <- select_dates_by_offset(dates, window_size, step_size, offset, rolling)
+
+  # Create masking tibble
+  mask <- data_post %>%  filter(mask==1) %>% select(stock_id,date)
 
   # Set up parallel processing if specified
   if (!is.null(num_cores)) {
@@ -183,14 +193,14 @@ backtesting_weights <- function(data, return_label, benchmark_weights = NULL, ma
 
       # Initialize progress bar
       if (verbose) {
-        pb <- cli::cli_progress_bar("    Running predictions for {model_name} - {config_name}", total = length(map_indices), clear = FALSE, format = "{cli::pb_spin} {cli::pb_percent} [{cli::pb_bar}] {cli::pb_eta}")
+        pb <- cli::cli_progress_bar("Running predictions for {model_name} - {config_name}", total = length(map_indices), clear = FALSE, format = "{cli::pb_spin} {cli::pb_percent} [{cli::pb_bar}] {cli::pb_eta}")
       }
 
       # Execute predictions with progress updates
       weight_predictions <- furrr::future_map_dfr(
         map_indices,
         ~ {
-          result <- weightpred_map(.x, data_subset, indices, model_function, model_config)
+          result <- weightpred_map(.x, data_subset, indices, mask, model_function, model_config)
           if (verbose) {
             cli::cli_progress_update(id = pb)
           }
@@ -204,11 +214,12 @@ backtesting_weights <- function(data, return_label, benchmark_weights = NULL, ma
         cli::cli_progress_done(id = pb)
       }
 
-      # Post-process the weights to handle constraints and masking
-      final_weights <- postprocess_weights(weight_predictions, data_post, model_config)
+      # we do postprocessing later on the portfolio object. so we do not have to rework the weights here
+      # # Post-process the weights to handle constraints and masking
+      # final_weights <- postprocess_weights(weight_predictions, data_post, model_config)
 
       # Add the weights to the portfolio object
-      portfolio_object <- add_weight_model(portfolio_object, model_name, model_config, final_weights |> dplyr::select(-mask))
+      portfolio_object <- add_weight_model(portfolio_object, model_name, model_config, weight_predictions)
 
       if (verbose) {
         cli::cli_alert_success("    Successfully added weights for configuration '{config_name}' of model '{model_name}'.")
@@ -267,7 +278,7 @@ backtesting_weights <- function(data, return_label, benchmark_weights = NULL, ma
 #' )
 #'}
 #' @export
-postprocess_weights <- function(weight_predictions, original_data, config) {
+postprocess_weights <- function(weight_predictions, original_data, benchmark_weighst=NULL, mask_label=NULL, config) {
   # Check input types
   checkmate::assert_tibble(weight_predictions, min.rows = 1)
   checkmate::assert_tibble(original_data, min.rows = 1)

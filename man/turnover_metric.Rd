@@ -6,11 +6,6 @@
 \usage{
 turnover_metric()
 }
-\arguments{
-\item{y_true}{Tensor. A matrix where each row contains \code{stock_id}, \code{date}, \code{actual_return}.}
-
-\item{y_pred}{Tensor. Predicted portfolio weights.}
-}
 \value{
 A scalar turnover value for the current batch of data.
 }

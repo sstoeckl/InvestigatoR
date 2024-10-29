@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup, echo=TRUE, include=FALSE}
-library(InvestigatoR)
+#library(InvestigatoR)
 library(reticulate)
 library(tensorflow)
 library(keras3)
@@ -24,11 +24,11 @@ library(tibble)
 library(PerformanceAnalytics)
 ```
 ```{r setup2, echo=FALSE, include=TRUE}
-library(InvestigatoR)
+#library(InvestigatoR)
 library(reticulate)
 library(tensorflow)
 library(keras3)
-reticulate::use_virtualenv("../python/")
+reticulate::use_virtualenv("../../python/")
 # check for python availability and whether modules are installed
 reticulate::py_config()  
 reticulate::py_module_available("tensorflow")
@@ -36,6 +36,7 @@ reticulate::py_module_available("keras")
 library(dplyr)
 library(tibble)
 library(PerformanceAnalytics)
+devtools::load_all()
 data("data_ml")
 ```
 
@@ -67,10 +68,10 @@ config_keras_simple <- list(
   ),
   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
   epochs = 10,
-  verbose = 1,
-  seeds = c(42, 123, 456, 17, 55), # set random seeds to average over results
-  plot_training = TRUE,
-  plot_result = TRUE
+  verbose = 0,
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -104,7 +105,7 @@ keras_portfolios <- backtesting_weights(
   step_size = "1 year", 
   offset = "1 month", 
   in_sample = TRUE, 
-  num_cores = 20, 
+  num_cores = 4, 
   verbose = TRUE
 )
 ```
@@ -113,7 +114,7 @@ keras_portfolios <- backtesting_weights(
 
 ## Step 2: Add Custom Activations (Long-Only Portfolio)
 
-In this step, we introduce a custom activation function (`activation_box_sigmoid`) that constrains the portfolio to long-only positions, ensuring that all portfolio weights are positive and bounded between 0 and 1.
+In this step, we introduce a custom activation function (`activation_box_sigmoid`) that constrains the portfolio to long-only positions, ensuring that all portfolio weights are positive and bounded between 0 and 0.2.
 
 ```{r keras_with_activation}
 # Keras model with custom activation (long-only constraint)
@@ -121,13 +122,15 @@ config_keras_with_activation <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))  # Long-only
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))  # Long-only
   ),
   loss = list(name = "sharpe_ratio_loss"),
   optimizer = list(name = "optimizer_rmsprop", learning_rate = 0.001),
-  epochs = 50,
+  epochs = 10,
   verbose = 0,
-  seeds = c(42, 123, 456)
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -147,7 +150,7 @@ config_keras_with_early_stopping <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
   ),
   loss = list(name = "sharpe_ratio_loss", 
     transaction_costs = 0.001, 
@@ -162,7 +165,9 @@ config_keras_with_early_stopping <- list(
   ),
   epochs = 100,  # More epochs with early stopping
   verbose = 0,
-  seeds = c(42, 123, 456)
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -182,20 +187,26 @@ config_keras_increase_diversification <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
   ),
   loss = list(
     name = "sharpe_ratio_loss", 
     transaction_costs = 0.001, 
     delta = 0.1, 
-    lambda = 0.5,  # Stronger diversification penalty
+    lambda = 0.7,  # Stronger diversification penalty
     leverage = 1.0, 
     eta = 0.1
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 100,
+  metrics = list(diversification_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 100,  # More epochs with early stopping
   verbose = 0,
-  seeds = c(42, 123, 456)
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -215,7 +226,7 @@ config_keras_increase_leverage <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
   ),
   loss = list(
     name = "sharpe_ratio_loss", 
@@ -223,12 +234,18 @@ config_keras_increase_leverage <- list(
     delta = 0.1, 
     lambda = 0.1, 
     leverage = 1.0, 
-    eta = 0.5  # Stronger leverage penalty
+    eta = 0.7  # Stronger leverage penalty
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 100,
+  metrics = list(leverage_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 100,  # More epochs with early stopping
   verbose = 0,
-  seeds = c(42, 123, 456)
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -248,21 +265,26 @@ config_keras_increase_turnover <- list(
   layers = list(
     list(type = "dense", units = 32, activation = "relu"),
     list(type = "dense", units = 16, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 1.0))
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.20))
   ),
   loss = list(
     name = "sharpe_ratio_loss", 
-    transaction_costs = 0.005,  # Increase transaction costs to penalize high turnover
+    transaction_costs = 0.01,  # Increase transaction costs to penalize high turnover
     delta = 0.1, 
     lambda = 0.1, 
     leverage = 1.0, 
     eta = 0.1
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  metrics = list("turnover_metric"),
-  epochs = 100,
+  metrics = list(turnover_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 100,  # More epochs with early stopping
   verbose = 0,
-  seeds = c(42, 123, 456)
+  seeds = c(42), # 123, 456, 17, 55), # set random seeds to average over results
+  plot_training = FALSE,
+  plot_result = FALSE
 )
 ```
 
@@ -281,7 +303,7 @@ Now that we've defined our models, we set up the portfolio configuration to test
 pf_config <- list(
   keras_weights_simple = list(
     weight_func = "keras_weights",
-    config1 = config_keras_simple,
+    #config1 = config_keras_simple,
     config2 = config_keras_with_activation,
     config3 = config_keras_with_early_stopping,
     config4 = config_keras_increase_diversification,
@@ -300,17 +322,18 @@ We now run the backtest using the different Keras models we defined above. We wi
 ```{r run_backtest}
 # Run the backtest with all Keras configurations
 data("data_ml")
-weights <- backtesting_weights(
+keras_portfolios <- backtesting_weights(
   data = data_ml, 
+  portfolio_object = keras_portfolios,
   return_label = "R1M_Usd", 
   features = c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd"), 
   pf_config = pf_config,  # Portfolio config with multiple Keras configurations
   rolling = TRUE, 
   window_size = "5 years", 
-  step_size = "1 month", 
+  step_size = "1 year", 
   offset = "1 month", 
   in_sample = TRUE, 
-  num_cores = 2, 
+  num_cores = 20, 
   verbose = TRUE
 )
 ```
@@ -324,20 +347,201 @@ We analyze the results of the backtest to see how the different configurations p
 
 ```{r analyze_results}
 # Summarize the portfolio results
-weights_summary <- summary(weights)
+weights_summary <- summary(keras_portfolios)
 print(weights_summary)
 
 # Visualize the portfolio performance
-plot(weights)
+plot(keras_portfolios)
 
 # Additional analysis using PerformanceAnalytics
-summary(weights, type = "table.AnnualizedReturns")
-summary(weights, type = "table.Distributions")
+summary(keras_portfolios, type = "table.AnnualizedReturns")
+summary(keras_portfolios, type = "table.Distributions")
 ```
+
+
+## Utilize Advanced Loss Functions
+
+In this step, we incorporate advanced loss functions (`sharpe_ratio_difference_loss`, `information_ratio_loss_active_returns`, and `information_ratio_loss_regression_based`) into our Keras models. Additionally, we compute benchmark weights based on the `Mkt_Cap_3M_Usd` column to create a value-weighted benchmark and adjust the activation function to bound the weight changes (`delta_w`) between -0.2 and 0.2.
+
+### Define Benchmark Weights Based on Market Capitalization
+
+We compute the benchmark weights for each date by using the `Mkt_Cap_3M_Usd` column. This ensures that the benchmark is value-weighted.
+
+```{r compute_benchmark_weights, echo=TRUE}
+# Create value-weighted benchmark weights based on Mkt_Cap_3M_Usd
+data_ml <- data_ml %>%
+  group_by(date) %>%
+  mutate(benchmark = Mkt_Cap_3M_Usd / sum(Mkt_Cap_3M_Usd)) %>%
+  ungroup()
+
+# Verify that benchmark weights sum to 1 for each date
+benchmark_sum <- data_ml %>%
+  group_by(date) %>%
+  summarize(total_benchmark = sum(benchmark))
+
+print(benchmark_sum)
+```
+
+
+### Configure Models with Advanced Loss Functions
+
+We create separate configurations for each advanced loss function, incorporating the custom activation function and the value-weighted benchmark.
+
+#### Sharpe Ratio Difference Loss
+
+```{r config_sharpe_ratio_difference, echo=TRUE}
+# Configuration for Sharpe Ratio Difference Loss
+config_sharpe_ratio_difference <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.2, max_weight = 0.2))  # Bound delta_w
+  ),
+  loss = list(
+    name = "sharpe_ratio_difference_loss",
+    lambda_l1 = 0.01,
+    lambda_l2 = 0.01
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  metrics = list(distance_from_benchmark_l1_metric(), distance_from_benchmark_l2_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 50,
+  batch_size = 128,
+  verbose = 1,
+  seeds = c(42),
+  plot_training = FALSE,
+  plot_result = FALSE
+)
+```
+
+#### Information Ratio Loss (Active Returns)
+
+```{r config_information_ratio_active, echo=TRUE}
+# Configuration for Information Ratio Loss based on Active Returns
+config_information_ratio_active <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.2, max_weight = 0.2))  # Bound delta_w
+  ),
+  loss = list(
+    name = "information_ratio_loss_active_returns",
+    lambda_l1 = 0.01,
+    lambda_l2 = 0.01
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  metrics = list(distance_from_benchmark_l1_metric(), distance_from_benchmark_l2_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 50,
+  batch_size = 128,
+  verbose = 1,
+  seeds = c(42),
+  plot_training = FALSE,
+  plot_result = FALSE
+)
+```
+
+#### Information Ratio Loss (Regression-Based)
+
+```{r config_information_ratio_regression, echo=TRUE}
+# Configuration for Information Ratio Loss based on Regression
+config_information_ratio_regression <- list(
+  layers = list(
+    list(type = "dense", units = 32, activation = "relu"),
+    list(type = "dense", units = 16, activation = "relu"),
+    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = -0.2, max_weight = 0.2))  # Bound delta_w
+  ),
+  loss = list(
+    name = "information_ratio_loss_regression_based",
+    lambda_l1 = 0.01,
+    lambda_l2 = 0.01
+  ),
+  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
+  metrics = list(distance_from_benchmark_l1_metric(), distance_from_benchmark_l2_metric()),
+  callbacks = list(
+    callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+  ),
+  epochs = 50,
+  batch_size = 128,
+  verbose = 1,
+  seeds = c(42),
+  plot_training = FALSE,
+  plot_result = FALSE
+)
+```
+
+### Define Portfolio Configurations
+
+We aggregate all configurations into a portfolio configuration list to be used in the backtest.
+
+```{r define_portfolio_config, echo=TRUE}
+# Define portfolio config with all advanced Keras configurations
+pf_config_advanced <- list(
+  keras_weights_sharpe_ratio_difference = list(
+    weight_func = "keras_weights",
+    config1 = config_sharpe_ratio_difference,
+    config2 = config_information_ratio_active,
+    config3 = config_information_ratio_regression
+  )
+)
+```
+
+### Run Backtests with Advanced Configurations
+
+We execute the backtests for each advanced configuration and evaluate their performance.
+
+```{r run_advanced_backtests, echo=TRUE}
+# Run the backtest with advanced Keras configurations
+advanced_keras_portfolios <- backtesting_weights(
+  data = data_ml, 
+  return_label = "R1M_Usd", 
+  benchmark_weights = "benchmark",
+  portfolio_object = keras_portfolios,
+  features = features, 
+  pf_config = pf_config_advanced,  # Portfolio config with advanced Keras configurations
+  rolling = TRUE, 
+  window_size = "5 years", 
+  step_size = "1 year", 
+  offset = "1 month", 
+  in_sample = TRUE, 
+  num_cores = 20, 
+  verbose = TRUE
+)
+```
+
+### Analyze the Results
+
+We summarize and visualize the performance of each advanced Keras model.
+
+```{r analyze_advanced_results, echo=TRUE}
+# Summarize the portfolio results
+weights_summary_advanced <- summary(advanced_keras_portfolios)
+print(weights_summary_advanced)
+
+# Visualize the portfolio performance
+plot(advanced_keras_portfolios)
+
+# Additional analysis using PerformanceAnalytics
+summary(advanced_keras_portfolios, type = "table.AnnualizedReturns")
+summary(advanced_keras_portfolios, type = "table.Distributions")
+```
+
+### Interpretation of Results
+
+Each advanced loss function brings a unique perspective to portfolio optimization:
+
+- **Sharpe Ratio Difference Loss**: Focuses on maximizing the difference in Sharpe ratios between the portfolio and the benchmark.
+- **Information Ratio Loss (Active Returns)**: Aims to maximize the Information Ratio based on active returns relative to the benchmark.
+- **Information Ratio Loss (Regression-Based)**: Enhances the Information Ratio by considering regression-based alpha and idiosyncratic return variability.
+
+By bounding `delta_w` between -0.2 and 0.2, we ensure that the portfolio adjustments remain moderate, avoiding extreme weight shifts that could lead to high turnover or leverage.
 
 ---
 
 ## Conclusion
 
-This vignette has shown how to progressively build more complex Keras models to predict and optimize portfolio weights using the `InvestigatoR` package. By adding custom activations, early stopping, and penalties on turnover, leverage, and diversification, we can better control portfolio risk and performance.
-
+In this extended vignette, we've demonstrated how to leverage advanced custom loss functions within the `InvestigatoR` package to optimize portfolio weights using Keras models. By computing value-weighted benchmarks and constraining weight adjustments, we enhance the robustness and interpretability of our portfolio optimization strategies. The incorporation of penalties for turnover, leverage, and diversification further refines the portfolio's performance, balancing return objectives with risk management.

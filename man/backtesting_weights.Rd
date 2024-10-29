@@ -7,7 +7,7 @@
 backtesting_weights(
   data,
   return_label,
-  benchmark_weights = NULL,
+  benchmark_label = NULL,
   mask_label = NULL,
   features,
   pf_config,
@@ -26,7 +26,7 @@ backtesting_weights(
 
 \item{return_label}{Column name of the actual return.}
 
-\item{benchmark_weights}{Column name of the benchmark weights (optional).}
+\item{benchmark_label}{Column name of the benchmark weights (optional).}
 
 \item{mask_label}{Column name of the mask indicator (optional).}
 

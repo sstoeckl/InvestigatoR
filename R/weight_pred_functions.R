@@ -1,8 +1,8 @@
-#' Keras Weight Prediction Function with Masking and Benchmark Handling
+#' Keras Weight Prediction Function with Benchmark Handling
 #'
 #' This function trains a Keras neural network to predict portfolio weights based on the provided training data.
 #' The Keras model structure is passed in the `config` argument, and you can define custom layers, optimizers, loss functions, and callbacks (like early stopping).
-#' Additionally, this function can handle masking and benchmark weights, which will be passed to the loss function as part of `y_true`.
+#' Additionally, this function can handle benchmark weights, which will be passed to the loss function as part of `y_true`.
 #'
 #' ## Config Structure
 #'
@@ -16,7 +16,7 @@
 #' - `seeds`: A list of seeds for reproducibility and multiple prediction averaging.
 #' - `python_env`: Python environment to use for training.
 #'
-#' @param train_data A data frame with columns: `stock_id`, `date`, `benchmark`, `mask`, `actual_return`, and features.
+#' @param train_data A data frame with columns: `stock_id`, `date`, `benchmark`, `actual_return`, and features.
 #' @param test_data A data frame with columns: `stock_id`, `date`, and features.
 #' @param config A list containing the configuration for the Keras model, including layers, optimizer, loss function, and advanced features like callbacks.
 #'
@@ -33,7 +33,7 @@
 #' library(keras3)
 #' reticulate::use_virtualenv("C:/R/python/")
 #' data(data_ml)
-#' test_data_ml <- data_ml %>% filter(stock_id <= 5)
+#' test_data_ml <- data_ml %>% filter(stock_id <= 29)
 #' features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
 #' train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |>
 #'   group_by(date) |>
@@ -73,6 +73,8 @@
 #' print(weights)
 #' }
 keras_weights <- function(train_data, test_data, config = list()) {
+  # train_data <- train_data_ex
+  # test_data <- test_data_ex
   # Set the specified Python environment if provided
   if (!is.null(config$python_env)) {
     reticulate::use_python(config$python_env, required = TRUE)
@@ -106,7 +108,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
 
   # Convert to matrices for Keras
   train_x <- as.matrix(train_data[, feature_names])
-  train_y <- as.matrix(cbind(stock_id, as.numeric(date), benchmark, train_data[[return_label]]))  # Attach mask and benchmark to y
+  train_y <- as.matrix(cbind(stock_id, as.numeric(date), benchmark, train_data[[return_label]]))  # Attach benchmark to y
   test_x <- as.matrix(test_data[, feature_names])
 
   # Dynamically determine input shape based on number of features
@@ -232,7 +234,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
     pred_weight = avg_predictions
   )
 
-  cli::cli_alert_info("Keras model weight prediction completed.")
+  cli::cli_alert_info("Keras model weight prediction completed for predictions with min-date {as.Date(min(predictions$date))} and max-date {as.Date(max(predictions$date))}.")
 
   return_list <- list(
     predictions = predictions,
@@ -618,6 +620,545 @@ dummy_mse_loss <- function(y_true, y_pred) {
   mse <- tf$reduce_mean(tf$square(actual_returns - y_pred))
 
   return(mse)
+}
+
+#' Custom Sharpe Ratio Difference Loss Function with L1/L2 Regularization for Keras
+#'
+#' This function calculates a custom loss for portfolio optimization using Keras,
+#' aiming to maximize the difference in Sharpe ratio between the portfolio and a benchmark
+#' (e.g., S&P 500). It includes L1 and L2 regularization penalties to control the magnitude
+#' and sparsity of portfolio weight adjustments.
+#'
+#' @param transaction_costs Numeric. Penalty applied to portfolio turnover (default: 0.001).
+#' @param delta Numeric. Diversification target (default: 0.1).
+#' @param lambda Numeric. Diversification penalty multiplier (default: 0.1).
+#' @param leverage Numeric. Target portfolio leverage (default: 1.0).
+#' @param eta Numeric. Leverage penalty multiplier (default: 0.1).
+#' @param lambda_l1 Numeric. L1 regularization coefficient (default: 0.01).
+#' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
+#'
+#' @return A scalar loss value that combines the negative Sharpe ratio difference with L1/L2 regularization.
+#' @import keras
+#' @import tensorflow
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Example: simple portfolio with 3 stocks and 2 dates
+#' example_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark = c(0.4, 0.4, 0.3, 0.3, 0.3, 0.3),  # Benchmark weights
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)  # Actual stock returns
+#' )
+#'
+#' # Sample predicted weight adjustments (delta_w) for each stock and date
+#' predicted_weight_changes <- c(0.05, 0.06, -0.01, -0.02, -0.01, -0.01)
+#'
+#' # Convert data to TensorFlow tensors
+#' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
+#' y_pred <- tf$constant(predicted_weight_changes, dtype = "float32")
+#'
+#' # Call the custom loss function
+#' loss_value <- sharpe_ratio_difference_loss(
+#'   lambda_l1 = 0.01,    # L1 regularization coefficient
+#'   lambda_l2 = 0.01     # L2 regularization coefficient
+#' )
+#'
+#' # Print the calculated loss value
+#' print(loss_value)
+#' }
+sharpe_ratio_difference_loss <- function(lambda_l1 = 0.01,lambda_l2 = 0.01) {
+  function(y_true, y_pred) {
+    # Extract stock_id, date, benchmark weights, and actual_return from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
+    benchmark_weights <- y_true[, 3]
+    actual_returns <- y_true[, 4]
+
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists using map_fn and where
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates,
+      dtype = tf$int32
+    )
+
+    # Flatten actual_returns and y_pred to 1D tensors
+    actual_returns_flat <- tf$reshape(actual_returns, shape = list(-1L))
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))
+
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Scatter the actual returns and predicted weight changes into tensors
+    stock_returns_tensor <- tf$scatter_nd(indices, actual_returns_flat, shape = list(num_dates, num_stocks))
+    delta_w_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
+    benchmark_weights_tensor <- tf$scatter_nd(indices, benchmark_weights, shape = list(num_dates, num_stocks))
+
+    # Compute portfolio weights: benchmark + delta_w
+    portfolio_weights_tensor <- benchmark_weights_tensor + delta_w_tensor
+
+    # Normalize portfolio weights based on the sum of absolute weights per date
+    weight_sum_per_date <- tf$reduce_sum(tf$abs(portfolio_weights_tensor), axis = -1L, keepdims = TRUE)
+    normalized_weights <- portfolio_weights_tensor / (weight_sum_per_date + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Calculate portfolio returns as the sum of weighted stock returns per date
+    portfolio_returns <- tf$reduce_sum(normalized_weights * stock_returns_tensor, axis = -1L)
+
+    # Calculate benchmark returns as the sum of benchmark weights times stock returns per date
+    benchmark_returns <- tf$reduce_sum(benchmark_weights_tensor * stock_returns_tensor, axis = -1L)
+
+    # Calculate Sharpe ratio for portfolio
+    portfolio_return_mean <- tf$reduce_mean(portfolio_returns)
+    portfolio_return_std <- tf$math$reduce_std(portfolio_returns)
+    sharpe_portfolio <- portfolio_return_mean / (portfolio_return_std + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Calculate Sharpe ratio for benchmark
+    benchmark_return_mean <- tf$reduce_mean(benchmark_returns)
+    benchmark_return_std <- tf$math$reduce_std(benchmark_returns)
+    sharpe_benchmark <- benchmark_return_mean / (benchmark_return_std + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Calculate Sharpe ratio difference
+    sharpe_diff <- sharpe_portfolio - sharpe_benchmark
+
+    # Apply L1 and L2 regularization on delta_w
+    l1_penalty <- lambda_l1 * tf$reduce_sum(tf$abs(y_pred_flat))
+    l2_penalty <- lambda_l2 * tf$reduce_sum(tf$square(y_pred_flat))
+    regularization_penalty <- l1_penalty + l2_penalty
+
+    # Define loss: negative Sharpe ratio difference plus regularization
+    loss <- -sharpe_diff + regularization_penalty
+
+    return(loss)
+  }
+}
+
+#' Custom Information Ratio (Active Returns) Loss Function with L1/L2 Regularization for Keras
+#'
+#' This function calculates a custom loss for portfolio optimization using Keras,
+#' aiming to maximize the Information Ratio (IR) based on active returns relative to a benchmark
+#' (e.g., S&P 500). It includes L1 and L2 regularization penalties to control the magnitude
+#' and sparsity of portfolio weight adjustments.
+#'
+#' @param lambda_l1 Numeric. L1 regularization coefficient (default: 0.01).
+#' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
+#'
+#' @return A scalar loss value that combines the negative Information Ratio with L1/L2 regularization.
+#' @import keras
+#' @import tensorflow
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Example: simple portfolio with 3 stocks and 2 dates
+#' example_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark = c(0.4, 0.4, 0.3, 0.3, 0.3, 0.3),  # Benchmark weights
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)  # Actual stock returns
+#' )
+#'
+#' # Sample predicted weight adjustments (delta_w) for each stock and date
+#' predicted_weight_changes <- c(0.05, 0.06, -0.01, -0.02, -0.01, -0.01)
+#'
+#' # Convert data to TensorFlow tensors
+#' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
+#' y_pred <- tf$constant(predicted_weight_changes, dtype = "float32")
+#'
+#' # Call the custom loss function
+#' loss_value <- information_ratio_loss_active_returns(
+#'   lambda_l1 = 0.01,
+#'   lambda_l2 = 0.01
+#' )(y_true, y_pred)
+#'
+#' # Print the calculated loss value
+#' print(loss_value)
+#' }
+information_ratio_loss_active_returns <- function(lambda_l1 = 0.01, lambda_l2 = 0.01) {
+  function(y_true, y_pred) {
+    # Extract stock_id, date, benchmark weights, and actual_return from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
+    benchmark_weights <- y_true[, 3]
+    actual_returns <- y_true[, 4]
+
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists using map_fn and where
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates,
+      dtype = tf$int32
+    )
+
+    # Flatten actual_returns and y_pred to 1D tensors
+    actual_returns_flat <- tf$reshape(actual_returns, shape = list(-1L))
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))
+
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Scatter the actual returns and predicted weight changes into tensors
+    stock_returns_tensor <- tf$scatter_nd(indices, actual_returns_flat, shape = list(num_dates, num_stocks))
+    delta_w_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
+    benchmark_weights_tensor <- tf$scatter_nd(indices, benchmark_weights, shape = list(num_dates, num_stocks))
+
+    # Compute portfolio weights: benchmark + delta_w
+    portfolio_weights_tensor <- benchmark_weights_tensor + delta_w_tensor
+
+    # Normalize portfolio weights based on the sum of absolute weights per date
+    weight_sum_per_date <- tf$reduce_sum(tf$abs(portfolio_weights_tensor), axis = -1L, keepdims = TRUE)
+    normalized_weights <- portfolio_weights_tensor / (weight_sum_per_date + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Calculate portfolio returns as the sum of weighted stock returns per date
+    portfolio_returns <- tf$reduce_sum(normalized_weights * stock_returns_tensor, axis = -1L)
+
+    # Calculate benchmark returns as the sum of benchmark weights times stock returns per date
+    benchmark_returns <- tf$reduce_sum(benchmark_weights_tensor * stock_returns_tensor, axis = -1L)
+
+    # Calculate active returns
+    active_returns <- portfolio_returns - benchmark_returns
+
+    # Calculate mean and standard deviation of active returns
+    mean_active_return <- tf$reduce_mean(active_returns)
+    std_active_return <- tf$math$reduce_std(active_returns)
+
+    # Calculate Information Ratio (IR)
+    information_ratio <- mean_active_return / (std_active_return + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Apply L1 and L2 regularization on delta_w
+    l1_penalty <- lambda_l1 * tf$reduce_sum(tf$abs(y_pred_flat))
+    l2_penalty <- lambda_l2 * tf$reduce_sum(tf$square(y_pred_flat))
+    regularization_penalty <- l1_penalty + l2_penalty
+
+    # Define loss: negative IR plus regularization
+    loss <- -information_ratio + regularization_penalty
+
+    return(loss)
+  }
+}
+
+#' Custom Regression-Based Information Ratio Loss Function with L1/L2 Regularization for Keras
+#'
+#' This function calculates a custom loss for portfolio optimization using Keras,
+#' aiming to maximize the Information Ratio (IR) based on regression alpha and idiosyncratic
+#' return standard deviation relative to a benchmark (e.g., S&P 500). It includes L1 and L2
+#' regularization penalties to control the magnitude and sparsity of portfolio weight adjustments.
+#'
+#' @param lambda_l1 Numeric. L1 regularization coefficient (default: 0.01).
+#' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
+#'
+#' @return A scalar loss value that combines the negative Information Ratio with L1/L2 regularization.
+#' @import keras
+#' @import tensorflow
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Example: simple portfolio with 3 stocks and 2 dates
+#' example_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark = c(0.4, 0.4, 0.3, 0.3, 0.3, 0.3),  # Benchmark weights
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)  # Actual stock returns
+#' )
+#'
+#' # Sample predicted weight adjustments (delta_w) for each stock and date
+#' predicted_weight_changes <- c(0.05, 0.06, -0.01, -0.02, -0.01, -0.01)
+#'
+#' # Convert data to TensorFlow tensors
+#' y_true <- tf$constant(as.matrix(example_data), dtype = "float32")
+#' y_pred <- tf$constant(predicted_weight_changes, dtype = "float32")
+#'
+#' # Call the custom loss function
+#' loss_value <- information_ratio_loss_regression_based(
+#'   lambda_l1 = 0.01,
+#'   lambda_l2 = 0.01
+#' )(y_true, y_pred)
+#'
+#' # Print the calculated loss value
+#' print(loss_value)
+#' }
+information_ratio_loss_regression_based <- function(lambda_l1 = 0.01, lambda_l2 = 0.01) {
+  function(y_true, y_pred) {
+    # Extract stock_id, date, benchmark weights, and actual_return from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
+    benchmark_weights <- y_true[, 3]
+    actual_returns <- y_true[, 4]
+
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists using map_fn and where
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates,
+      dtype = tf$int32
+    )
+
+    # Flatten actual_returns and y_pred to 1D tensors
+    actual_returns_flat <- tf$reshape(actual_returns, shape = list(-1L))
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))
+
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Scatter the actual returns and predicted weight changes into tensors
+    stock_returns_tensor <- tf$scatter_nd(indices, actual_returns_flat, shape = list(num_dates, num_stocks))
+    delta_w_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
+    benchmark_weights_tensor <- tf$scatter_nd(indices, benchmark_weights, shape = list(num_dates, num_stocks))
+
+    # Compute portfolio weights: benchmark + delta_w
+    portfolio_weights_tensor <- benchmark_weights_tensor + delta_w_tensor
+
+    # Normalize portfolio weights based on the sum of absolute weights per date
+    weight_sum_per_date <- tf$reduce_sum(tf$abs(portfolio_weights_tensor), axis = -1L, keepdims = TRUE)
+    normalized_weights <- portfolio_weights_tensor / (weight_sum_per_date + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Calculate portfolio returns as the sum of weighted stock returns per date
+    portfolio_returns <- tf$reduce_sum(normalized_weights * stock_returns_tensor, axis = -1L)
+
+    # Calculate benchmark returns as the sum of benchmark weights times stock returns per date
+    benchmark_returns <- tf$reduce_sum(benchmark_weights_tensor * stock_returns_tensor, axis = -1L)
+
+    # Perform regression: portfolio_returns = alpha + beta * benchmark_returns + residuals
+    mean_portfolio_return <- tf$reduce_mean(portfolio_returns)
+    mean_benchmark_return <- tf$reduce_mean(benchmark_returns)
+
+    # Compute covariance and variance
+    covariance <- tf$reduce_mean(portfolio_returns * benchmark_returns) - mean_portfolio_return * mean_benchmark_return
+    variance_benchmark <- tf$reduce_mean(tf$square(benchmark_returns)) - tf$square(mean_benchmark_return)
+
+    # Compute beta and alpha
+    beta <- covariance / (variance_benchmark + tf$constant(.Machine$double.eps, dtype = "float32"))
+    alpha <- mean_portfolio_return - beta * mean_benchmark_return
+
+    # Compute residuals
+    residuals <- portfolio_returns - alpha - beta * benchmark_returns
+
+    # Compute standard deviation of residuals
+    std_residuals <- tf$math$reduce_std(residuals)
+
+    # Compute Information Ratio (IR)
+    information_ratio <- alpha / (std_residuals + tf$constant(.Machine$double.eps, dtype = "float32"))
+
+    # Apply L1 and L2 regularization on delta_w
+    l1_penalty <- lambda_l1 * tf$reduce_sum(tf$abs(y_pred_flat))
+    l2_penalty <- lambda_l2 * tf$reduce_sum(tf$square(y_pred_flat))
+    regularization_penalty <- l1_penalty + l2_penalty
+
+    # Define loss: negative Information Ratio plus regularization
+    loss <- -information_ratio + regularization_penalty
+
+    return(loss)
+  }
+}
+
+#' Custom L1 Distance from Benchmark Metric for Keras
+#'
+#' This function calculates the L1 distance between the portfolio weights and the benchmark weights,
+#' effectively measuring how much the portfolio has deviated from the benchmark in terms of absolute adjustments.
+#'
+#' @return A scalar L1 distance value for the current batch of data.
+#' @import keras
+#' @import tensorflow
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Define test data: 3 stocks over 2 dates
+#' test_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark = c(0.4, 0.4, 0.3, 0.3, 0.3, 0.3),  # Benchmark weights
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)  # Actual returns
+#' )
+#'
+#' # Predicted weight adjustments (delta_w)
+#' predicted_weight_changes <- c(0.05, 0.06, -0.01, -0.02, -0.01, -0.01)
+#'
+#' # Convert to TensorFlow tensors
+#' y_true_test <- tf$constant(as.matrix(test_data), dtype = "float32")
+#' y_pred_test <- tf$constant(predicted_weight_changes, dtype = "float32")
+#'
+#' # Define the custom L1 distance metric
+#' l1_metric <- distance_from_benchmark_l1_metric()
+#'
+#' # Compute the metric value
+#' metric_value <- l1_metric(y_true_test, y_pred_test)
+#'
+#' # Print the metric value
+#' print(metric_value)
+#' }
+distance_from_benchmark_l1_metric <- function() {
+  keras::custom_metric("distance_from_benchmark_l1", function(y_true, y_pred) {
+    # Extract stock_id, date, benchmark weights from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
+    benchmark_weights <- y_true[, 3]
+
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists using map_fn and where
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates,
+      dtype = tf$int32
+    )
+
+    # Flatten y_pred to 1D tensor
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))
+
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Scatter the benchmark weights and delta_w into tensors
+    benchmark_weights_tensor <- tf$scatter_nd(indices, benchmark_weights, shape = list(num_dates, num_stocks))
+    delta_w_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
+
+    # Compute portfolio weights: benchmark + delta_w
+    portfolio_weights_tensor <- benchmark_weights_tensor + delta_w_tensor
+
+    # Calculate absolute differences (L1)
+    abs_diff <- tf$abs(portfolio_weights_tensor - benchmark_weights_tensor)
+
+    # Compute mean L1 distance across all stock-date combinations
+    mean_l1_distance <- tf$reduce_mean(abs_diff)
+
+    return(mean_l1_distance)
+  })
+}
+
+#' Custom L2 Distance from Benchmark Metric for Keras
+#'
+#' This function calculates the L2 distance between the portfolio weights and the benchmark weights,
+#' effectively measuring how much the portfolio has deviated from the benchmark in terms of squared adjustments.
+#'
+#' @return A scalar L2 distance value for the current batch of data.
+#' @import keras
+#' @import tensorflow
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Define test data: 3 stocks over 2 dates
+#' test_data <- data.frame(
+#'   stock_id = c(1, 1, 2, 2, 3, 3),
+#'   date = c(1, 2, 1, 2, 1, 2),
+#'   benchmark = c(0.4, 0.4, 0.3, 0.3, 0.3, 0.3),  # Benchmark weights
+#'   actual_return = c(0.01, 0.02, -0.01, 0.01, 0.03, -0.02)  # Actual returns
+#' )
+#'
+#' # Predicted weight adjustments (delta_w)
+#' predicted_weight_changes <- c(0.05, 0.06, -0.01, -0.02, -0.01, -0.01)
+#'
+#' # Convert to TensorFlow tensors
+#' y_true_test <- tf$constant(as.matrix(test_data), dtype = "float32")
+#' y_pred_test <- tf$constant(predicted_weight_changes, dtype = "float32")
+#'
+#' # Define the custom L2 distance metric
+#' l2_metric <- distance_from_benchmark_l2_metric()
+#'
+#' # Compute the metric value
+#' metric_value <- l2_metric(y_true_test, y_pred_test)
+#'
+#' # Print the metric value
+#' print(metric_value)
+#' }
+distance_from_benchmark_l2_metric <- function() {
+  keras::custom_metric("distance_from_benchmark_l2", function(y_true, y_pred) {
+    # Extract stock_id, date, benchmark weights from y_true
+    stock_ids <- tf$cast(y_true[, 1], "int32")
+    dates <- tf$cast(y_true[, 2], "int32")
+    benchmark_weights <- y_true[, 3]
+
+    # Get unique stock_id and date vectors for reshaping
+    unique_stock_ids <- tf$unique(stock_ids)$y
+    unique_dates <- tf$unique(dates)$y
+
+    # Determine the number of unique stocks and dates
+    num_dates <- tf$shape(unique_dates)[1]
+    num_stocks <- tf$shape(unique_stock_ids)[1]
+
+    # Get the indices for stock_id and date in the unique lists using map_fn and where
+    stock_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_stock_ids, x)), "int32")),
+      stock_ids,
+      dtype = tf$int32
+    )
+    date_indices <- tf$map_fn(
+      function(x) tf$squeeze(tf$cast(tf$where(tf$equal(unique_dates, x)), "int32")),
+      dates,
+      dtype = tf$int32
+    )
+
+    # Flatten y_pred to 1D tensor
+    y_pred_flat <- tf$reshape(y_pred, shape = list(-1L))
+
+    # Stack date_indices and stock_indices to create [N, 2] indices
+    indices <- tf$stack(list(date_indices, stock_indices), axis = -1)
+
+    # Scatter the benchmark weights and delta_w into tensors
+    benchmark_weights_tensor <- tf$scatter_nd(indices, benchmark_weights, shape = list(num_dates, num_stocks))
+    delta_w_tensor <- tf$scatter_nd(indices, y_pred_flat, shape = list(num_dates, num_stocks))
+
+    # Compute portfolio weights: benchmark + delta_w
+    portfolio_weights_tensor <- benchmark_weights_tensor + delta_w_tensor
+
+    # Calculate squared differences (L2)
+    squared_diff <- tf$square(portfolio_weights_tensor - benchmark_weights_tensor)
+
+    # Compute mean L2 distance across all stock-date combinations
+    mean_l2_distance <- tf$reduce_mean(squared_diff)
+
+    return(mean_l2_distance)
+  })
 }
 
 ########################### ACTIVATIONS

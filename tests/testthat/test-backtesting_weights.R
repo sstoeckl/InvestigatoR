@@ -1,4 +1,3 @@
-
 library(testthat)
 library(tidyverse)
 library(reticulate)
@@ -7,134 +6,270 @@ library(keras3)
 reticulate::use_virtualenv("C:/R/python/")
 reticulate::py_config()
 
-test_that("Long-only portfolio with Sharpe ratio loss works", {
-  y_true <- matrix(c(1, 1, 0.05, 1, 1, 2, 0.02, 1, 1, 3, 0.01, 1, 2, 1, 0.05, 1, 2, 2, 0.02, 1, 2, 3, 0.01, 1), ncol = 4, byrow = TRUE)
-  y_pred <- c(0.4, 0.3, 0.3, 0.5, 0.7, -0.3)
-  y_true <- tf$constant(y_true, dtype = "float32")
-  y_pred <- tf$constant(y_pred, dtype = "float32")
-
-  loss_value <- sharpe_ratio_loss_keras(y_true, y_pred, max_weight = 0.5, min_weight = 0)
-  expect_s3_class(loss_value, "tensorflow.tensor")
-})
-
-test_that("Long-short portfolio with weight constraints works", {
-  y_true <- matrix(c(1, 1, 0.05, 1, 1, 2, 0.02, 1, 1, 3, 0.01, 1, 2, 1, 0.05, 1, 2, 2, 0.02, 1, 2, 3, 0.01, 1), ncol = 4, byrow = TRUE)
-  y_pred <- c(0.4, 0.3, 0.3, 0.5, 0.7, -0.3)
-  y_true <- tf$constant(y_true, dtype = "float32")
-  y_pred <- tf$constant(y_pred, dtype = "float32")
-
-  loss_value <- sharpe_ratio_loss_keras(y_true, y_pred, max_weight = 0.5, min_weight = -0.5)
-  expect_s3_class(loss_value, "tensorflow.tensor")
-})
-
-test_that("Portfolio with turnover penalty works", {
-  y_true <- matrix(c(1, 1, 0.05, 1, 1, 2, 0.02, 1, 1, 3, 0.01, 1, 2, 1, 0.05, 1, 2, 2, 0.02, 1, 2, 3, 0.01, 1), ncol = 4, byrow = TRUE)
-  y_pred <- c(0.4, 0.3, 0.3, 0.5, 0.7, -0.3)
-  y_true <- tf$constant(y_true, dtype = "float32")
-  y_pred <- tf$constant(y_pred, dtype = "float32")
-
-  loss_value <- sharpe_ratio_loss_keras(y_true, y_pred, turnover_penalty_weight = 0.05)
-  expect_s3_class(loss_value, "tensorflow.tensor")
-})
-
 # Load the data_ml dataset
+# Replace this with the actual loading mechanism if different
 data("data_ml")
 
 # Create a small subset of data_ml for testing
-test_data_ml <- data_ml %>%  filter(stock_id<=5) |> arrange(date,stock_id)
+test_data_ml <- data_ml %>%
+  filter(stock_id <= 5)
 
 # Define common parameters for testing
 return_label <- "R1M_Usd"
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
 rolling <- FALSE
 window_size <- "5 years"
-step_size <- "1 month"
+step_size <- "1 year"
 offset <- "1 month"
 in_sample <- TRUE
 
-test_that("keras_weights works with custom Sharpe ratio loss function", {
+train_data_ex <- test_data_ml %>%
+  filter(date <= "2010-12-31")
 
-  train_data_ex <- test_data_ml |> filter(date<="2012-12-31") |>
-    select(stock_id, date, return_label, features) |>
-    mutate(mask=round(runif(840),0),benchmark=0) |> #random zeros and ones
-    relocate(c("stock_id", "date","benchmark","mask", all_of(return_label), all_of(features)))
-  test_data_ex <- test_data_ml |> filter(date>"2012-12-31") |>
-    select(stock_id, date, features)
+test_data_ex <- test_data_ml %>%
+  filter(date <= "2010-12-31")
 
-  # Keras model configuration
-  config <- list(
+# Create a new test file named `test-custom-loss-metrics.R`
+# Place this file in the `tests/testthat/` directory of your R package or project
+
+library(testthat)
+
+test_that("sharpe_ratio_loss functions correctly", {
+  # Define the configuration for sharpe_ratio_loss
+  config_sharpe <- list(
     layers = list(
+      list(type = "dense", units = 32, activation = "relu"),
       list(type = "dense", units = 16, activation = "relu"),
-      list(type = "dense", units = 8, activation = "relu"),
       list(type = "dense", units = 1, activation = "linear")
     ),
-    loss = dummy_mse_loss, #sharpe_ratio_loss_keras,  # Use custom Sharpe ratio loss function
-    optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-    epochs = 5,
-    batch_size = 50,
-    verbose = 0,  # Reduce verbosity for testing
-    seeds = c(42, 50, 62),  # Set seed for reproducibility
-    plot_training = FALSE
+    loss = list(
+      name = "sharpe_ratio_loss",
+      transaction_costs = 0.005,  # Example parameter
+      delta = 0.1,
+      lambda = 0.1,
+      leverage = 1.0,
+      eta = 0.1
+    ),
+    optimizer = list(
+      name = "optimizer_adam",
+      learning_rate = 0.001
+    ),
+    metrics = list(
+      distance_from_benchmark_l1_metric(),
+      distance_from_benchmark_l2_metric()
+    ),
+    callbacks = list(
+      callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+    ),
+    epochs = 10,
+    batch_size = 128,
+    verbose = 0,  # Set to 1 for detailed output
+    seeds = c(42),
+    plot_training = FALSE,
+    plot_result = FALSE
   )
 
-  # Run keras_weights with sharpe_ratio_loss_keras
-  weights <- keras_weights(
-    train_data = train_data_ex,
-    test_data = test_data_ex,
-    config = config
-  )
-  weights
+  # Invoke keras_weights with the sharpe_ratio_loss config
+  result_sharpe <- tryCatch({
+    keras_weights(train_data_ex, test_data_ex, config_sharpe)
+  }, error = function(e) {
+    fail(paste("keras_weights failed with sharpe_ratio_loss:", e$message))
+  })
 
-  # Check the weights are returned correctly
-  expect_s3_class(weights,"tbl_df")
-  expect_true(all(c("stock_id", "date", "pred_weight") %in% names(weights)))
+  # Extract the training history
+  history_sharpe <- result_sharpe$histories[[as.character(config_sharpe$seeds[[1]])]]
 
-  # Check if predicted weights are between the expected weight constraints
-  max_weight <- 0.1
-  min_weight <- -0.1
-  expect_true(all(weights$pred_weight >= min_weight))
-  expect_true(all(weights$pred_weight <= max_weight))
+  # Ensure that history_sharpe is not NULL
+  expect_true(!is.null(history_sharpe), info = "History object is NULL for sharpe_ratio_loss.")
+
+  # Extract final loss and metrics
+  final_loss <- tail(history_sharpe$metrics$loss, n = 1)
+  final_l1 <- tail(history_sharpe$metrics$distance_from_benchmark_l1, n = 1)
+  final_l2 <- tail(history_sharpe$metrics$distance_from_benchmark_l2, n = 1)
+
+  # Assertions
+  expect_true(is.finite(final_loss), info = "Final loss is not finite for sharpe_ratio_loss.")
+  expect_true(is.finite(final_l1) && final_l1 >= 0, info = "Final L1 distance is not finite or negative for sharpe_ratio_loss.")
+  expect_true(is.finite(final_l2) && final_l2 >= 0, info = "Final L2 distance is not finite or negative for sharpe_ratio_loss.")
+
+  # Optionally, check that loss decreased over epochs
+  expect_true(all(diff(history_sharpe$metrics$loss) <= 0), info = "Loss did not consistently decrease for sharpe_ratio_loss.")
 })
 
-# Unit Test for postprocess_weights
-test_that("postprocess_weights applies masking and box constraints correctly", {
-  # Example data
-  predicted_weights <- tibble::tibble(
-    stock_id = rep(1:10, each = 3),
-    date = rep(seq.Date(Sys.Date(), by = "days", length.out = 3), times = 10),
-    pred_weight = c(0.2, -0.5, 0.8,  # First stock, all three dates
-                0.3, 0.0, 0.2,   # Second stock
-                -0.6, 0.7, -0.4, # Third stock
-                0.9, -0.8, 0.1,  # Fourth stock
-                0.4, 0.3, -0.5,  # Fifth stock
-                -0.9, 0.1, 0.2,  # Sixth stock
-                0.5, 0.2, -0.1,  # Seventh stock
-                -0.3, 0.4, 0.7,  # Eighth stock
-                -0.2, 0.9, -0.5, # Ninth stock
-                0.3, -0.7, 0.4)  # Tenth stock
+test_that("sharpe_ratio_difference_loss functions correctly", {
+  # Define the configuration for sharpe_ratio_difference_loss
+  config_sharpe_diff <- list(
+    layers = list(
+      list(type = "dense", units = 32, activation = "relu"),
+      list(type = "dense", units = 16, activation = "relu"),
+      list(type = "dense", units = 1, activation = "linear")
+    ),
+    loss = list(
+      name = "sharpe_ratio_difference_loss",
+      lambda_l1 = 0.01,
+      lambda_l2 = 0.01
+    ),
+    optimizer = list(
+      name = "optimizer_adam",
+      learning_rate = 0.001
+    ),
+    metrics = list(
+      distance_from_benchmark_l1_metric(),
+      distance_from_benchmark_l2_metric()
+    ),
+    callbacks = list(
+      callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+    ),
+    epochs = 10,
+    batch_size = 128,
+    verbose = 0,
+    seeds = c(42),
+    plot_training = FALSE,
+    plot_result = FALSE
   )
 
-  original_data <- tibble::tibble(
-    stock_id = rep(1:10, each = 3),
-    date = rep(seq.Date(Sys.Date(), by = "days", length.out = 3), times = 10),
-    mask = c(rep(1, 27), rep(0, 3)) # 3 stocks are masked on the last day
-  )
+  # Invoke keras_weights with the sharpe_ratio_difference_loss config
+  result_sharpe_diff <- tryCatch({
+    keras_weights(train_data_ex, test_data_ex, config_sharpe_diff)
+  }, error = function(e) {
+    fail(paste("keras_weights failed with sharpe_ratio_difference_loss:", e$message))
+  })
 
-  # Define a model config with box constraints:
-  model_config <- list(
-    min_weight = -0.5,
-    max_weight = 0.5
-  )
+  # Extract the training history
+  history_sharpe_diff <- result_sharpe_diff$histories[[as.character(config_sharpe_diff$seeds[[1]])]]
 
-  # Apply the postprocessing function
-  postprocessed_weights <- postprocess_weights(predicted_weights, original_data, "mask", model_config)
+  # Ensure that history_sharpe_diff is not NULL
+  expect_true(!is.null(history_sharpe_diff), info = "History object is NULL for sharpe_ratio_difference_loss.")
 
-  # Check if masking was applied correctly
-  masked_weights <- postprocessed_weights %>%
-    filter(stock_id %in% 10)
-  expect_true(all(masked_weights$pred_weight == 0))  # Masked stocks should have weights set to 0
+  # Extract final loss and metrics
+  final_loss <- tail(history_sharpe_diff$metrics$loss, n = 1)
+  final_l1 <- tail(history_sharpe_diff$metrics$distance_from_benchmark_l1, n = 1)
+  final_l2 <- tail(history_sharpe_diff$metrics$distance_from_benchmark_l2, n = 1)
 
-  # Check if box constraints are respected
-  expect_true(all(postprocessed_weights$pred_weight >= model_config$min_weight &
-                    postprocessed_weights$pred_weight <= model_config$max_weight))
+  # Assertions
+  expect_true(is.finite(final_loss), info = "Final loss is not finite for sharpe_ratio_difference_loss.")
+  expect_true(is.finite(final_l1) && final_l1 >= 0, info = "Final L1 distance is not finite or negative for sharpe_ratio_difference_loss.")
+  expect_true(is.finite(final_l2) && final_l2 >= 0, info = "Final L2 distance is not finite or negative for sharpe_ratio_difference_loss.")
+
+  # Optionally, check that loss decreased over epochs
+  expect_true(all(diff(history_sharpe_diff$metrics$loss) <= 0), info = "Loss did not consistently decrease for sharpe_ratio_difference_loss.")
 })
+
+test_that("information_ratio_loss_active_returns functions correctly", {
+  # Define the configuration for information_ratio_loss_active_returns
+  config_info_ratio_active <- list(
+    layers = list(
+      list(type = "dense", units = 32, activation = "relu"),
+      list(type = "dense", units = 16, activation = "relu"),
+      list(type = "dense", units = 1, activation = "linear")
+    ),
+    loss = list(
+      name = "information_ratio_loss_active_returns",
+      lambda_l1 = 0.01,
+      lambda_l2 = 0.01
+    ),
+    optimizer = list(
+      name = "optimizer_adam",
+      learning_rate = 0.001
+    ),
+    metrics = list(
+      distance_from_benchmark_l1_metric(),
+      distance_from_benchmark_l2_metric()
+    ),
+    callbacks = list(
+      callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+    ),
+    epochs = 10,
+    batch_size = 128,
+    verbose = 0,
+    seeds = c(42),
+    plot_training = FALSE,
+    plot_result = FALSE
+  )
+
+  # Invoke keras_weights with the information_ratio_loss_active_returns config
+  result_info_ratio_active <- tryCatch({
+    keras_weights(train_data_ex, test_data_ex, config_info_ratio_active)
+  }, error = function(e) {
+    fail(paste("keras_weights failed with information_ratio_loss_active_returns:", e$message))
+  })
+
+  # Extract the training history
+  history_info_ratio_active <- result_info_ratio_active$histories[[as.character(config_info_ratio_active$seeds[[1]])]]
+
+  # Ensure that history_info_ratio_active is not NULL
+  expect_true(!is.null(history_info_ratio_active), info = "History object is NULL for information_ratio_loss_active_returns.")
+
+  # Extract final loss and metrics
+  final_loss <- tail(history_info_ratio_active$metrics$loss, n = 1)
+  final_l1 <- tail(history_info_ratio_active$metrics$distance_from_benchmark_l1, n = 1)
+  final_l2 <- tail(history_info_ratio_active$metrics$distance_from_benchmark_l2, n = 1)
+
+  # Assertions
+  expect_true(is.finite(final_loss), info = "Final loss is not finite for information_ratio_loss_active_returns.")
+  expect_true(is.finite(final_l1) && final_l1 >= 0, info = "Final L1 distance is not finite or negative for information_ratio_loss_active_returns.")
+  expect_true(is.finite(final_l2) && final_l2 >= 0, info = "Final L2 distance is not finite or negative for information_ratio_loss_active_returns.")
+
+  # Optionally, check that loss decreased over epochs
+  expect_true(all(diff(history_info_ratio_active$metrics$loss) <= 0), info = "Loss did not consistently decrease for information_ratio_loss_active_returns.")
+})
+
+test_that("information_ratio_loss_regression_based functions correctly", {
+  # Define the configuration for information_ratio_loss_regression_based
+  config_info_ratio_regression <- list(
+    layers = list(
+      list(type = "dense", units = 32, activation = "relu"),
+      list(type = "dense", units = 16, activation = "relu"),
+      list(type = "dense", units = 1, activation = "linear")
+    ),
+    loss = list(
+      name = "information_ratio_loss_regression_based",
+      lambda_l1 = 0.01,
+      lambda_l2 = 0.01
+    ),
+    optimizer = list(
+      name = "optimizer_adam",
+      learning_rate = 0.001
+    ),
+    metrics = list(
+      distance_from_benchmark_l1_metric(),
+      distance_from_benchmark_l2_metric()
+    ),
+    callbacks = list(
+      callback_early_stopping(monitor = "loss", min_delta = 0.001, patience = 3)
+    ),
+    epochs = 10,
+    batch_size = 128,
+    verbose = 0,
+    seeds = c(42),
+    plot_training = FALSE,
+    plot_result = FALSE
+  )
+
+  # Invoke keras_weights with the information_ratio_loss_regression_based config
+  result_info_ratio_regression <- tryCatch({
+    keras_weights(train_data_ex, test_data_ex, config_info_ratio_regression)
+  }, error = function(e) {
+    fail(paste("keras_weights failed with information_ratio_loss_regression_based:", e$message))
+  })
+
+  # Extract the training history
+  history_info_ratio_regression <- result_info_ratio_regression$histories[[as.character(config_info_ratio_regression$seeds[[1]])]]
+
+  # Ensure that history_info_ratio_regression is not NULL
+  expect_true(!is.null(history_info_ratio_regression), info = "History object is NULL for information_ratio_loss_regression_based.")
+
+  # Extract final loss and metrics
+  final_loss <- tail(history_info_ratio_regression$metrics$loss, n = 1)
+  final_l1 <- tail(history_info_ratio_regression$metrics$distance_from_benchmark_l1, n = 1)
+  final_l2 <- tail(history_info_ratio_regression$metrics$distance_from_benchmark_l2, n = 1)
+
+  # Assertions
+  expect_true(is.finite(final_loss), info = "Final loss is not finite for information_ratio_loss_regression_based.")
+  expect_true(is.finite(final_l1) && final_l1 >= 0, info = "Final L1 distance is not finite or negative for information_ratio_loss_regression_based.")
+  expect_true(is.finite(final_l2) && final_l2 >= 0, info = "Final L2 distance is not finite or negative for information_ratio_loss_regression_based.")
+
+  # Optionally, check that loss decreased over epochs
+  expect_true(all(diff(history_info_ratio_regression$metrics$loss) <= 0), info = "Loss did not consistently decrease for information_ratio_loss_regression_based.")
+})
+

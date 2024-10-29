@@ -32,73 +32,484 @@ offset <- "1 month"
 in_sample <- TRUE
 num_cores <- 2
 
-# Test 1: Create portfolioReturns object using create_portfolios
-test_that("create_portfolios function works correctly", {
-  portfolio <- create_portfolios(test_data_ml, return_label)
+test_that("create_portfolioReturns creates object correctly without benchmark", {
 
-  # Check if the portfolioReturns object is created correctly
-  expect_s3_class(portfolio, "portfolioReturns")
-  expect_true("models" %in% names(portfolio))
-  expect_true("weights" %in% names(portfolio))
-  expect_true("actual_returns" %in% names(portfolio))
-  expect_true("portfolio_returns" %in% names(portfolio))
+  # Create portfolioReturns object
+  pf <- create_portfolioReturns(test_data_ml, return_label)
 
-  # Check that actual_returns contains correct stock_id and date columns
-  expect_true(all(c("stock_id", "date", "actual_return") %in% colnames(portfolio$actual_returns)))
+  # Check class
+  expect_s3_class(pf, "portfolioReturns")
 
-  # Check for correct number of rows in weights and actual_returns
-  expect_equal(nrow(portfolio$weights), nrow(test_data_ml))
-  expect_equal(nrow(portfolio$actual_returns), nrow(test_data_ml))
+  # Check structure
+  expect_true(all(c("models", "postprocessing_config", "weights", "delta_weights",
+                    "benchmark_weights", "actual_returns", "portfolio_returns",
+                    "benchmark_returns") %in% names(pf)))
+
+  # Check weights
+  expect_equal(nrow(pf$weights), nrow(test_data_ml))
+  expect_true(all(c("stock_id", "date") %in% names(pf$weights)))
+
+  # Check delta_weights and benchmark_weights are NULL
+  expect_null(pf$delta_weights)
+  expect_null(pf$benchmark_weights)
+
+  # Check actual_returns
+  expect_equal(nrow(pf$actual_returns), nrow(test_data_ml))
+  expect_true(all(c("stock_id", "date", "actual_return") %in% names(pf$actual_returns)))
+
+  # Check portfolio_returns
+  expect_equal(nrow(pf$portfolio_returns), length(unique(test_data_ml$date)))
+  expect_true("date" %in% names(pf$portfolio_returns))
+
+  # Check no benchmark_returns
+  expect_null(pf$benchmark_returns)
 })
 
-# Test 2: Add weight model to portfolioReturns using add_weight_model
-test_that("add_weight_model adds a new weight model correctly", {
-  portfolio <- create_portfolios(test_data_ml, return_label)
+test_that("create_portfolioReturns creates object correctly with benchmark", {
+  # Sample data with benchmark
+  test_data_ml2 <- test_data_ml %>% mutate(benchmark=runif(nrow(test_data_ml)))
 
-  new_weights <- dummy_weights_func(train_data = NULL, test_data = test_data_ml, config = NULL)
+  # Create portfolioReturns object with benchmark
+  pf <- create_portfolioReturns(test_data_ml2, return_label, "benchmark")
 
-  portfolio <- add_weight_model(portfolio, model_name = "dummy_weights_func", weight_config = list(), new_weights = new_weights)
+  # Check class
+  expect_s3_class(pf, "portfolioReturns")
 
-  # Check if the weight model has been added correctly
-  expect_true("weights" %in% names(portfolio))
-  expect_true("dummy_weights_func_1" %in% colnames(portfolio$weights))
+  # Check structure
+  expect_true(all(c("models", "postprocessing_config", "weights", "delta_weights",
+                    "benchmark_weights", "actual_returns", "portfolio_returns",
+                    "benchmark_returns") %in% names(pf)))
 
-  # Check that the portfolio_returns has been updated
-  expect_true("dummy_weights_func_1" %in% colnames(portfolio$portfolio_returns))
+  # Check weights
+  expect_equal(nrow(pf$weights), nrow(test_data_ml2))
+  expect_true(all(c("stock_id", "date") %in% names(pf$weights)))
 
-  # Check that portfolio_returns and weights have the correct number of rows
-  expect_equal(nrow(portfolio$weights), nrow(test_data_ml))
-  expect_equal(nrow(portfolio$portfolio_returns), length(unique(test_data_ml$date)))
+  # Check delta_weights
+  expect_equal(nrow(pf$delta_weights), nrow(pf$weights))
+  expect_true(all(c("stock_id", "date") %in% names(pf$delta_weights)))
+
+  # Check benchmark_weights
+  expect_equal(nrow(pf$benchmark_weights), nrow(test_data_ml2))
+  expect_true(all(c("stock_id", "date", "benchmark_weight") %in% names(pf$benchmark_weights)))
+
+  # Check actual_returns
+  expect_equal(nrow(pf$actual_returns), nrow(test_data_ml2))
+  expect_true(all(c("stock_id", "date", "actual_return") %in% names(pf$actual_returns)))
+
+  # Check portfolio_returns
+  expect_equal(nrow(pf$portfolio_returns), length(unique(test_data_ml2$date)))
+  expect_true("date" %in% names(pf$portfolio_returns))
+  expect_true("benchmark_return" %in% names(pf$benchmark_returns))
 })
 
-# Test for backtesting_weights
-test_that("backtesting_weights function works correctly with dummy_weights_func", {
-  result <- backtesting_weights(
-    data = test_data_ml,
-    return_label = return_label,
-    features = features,
-    pf_config = pf_config,
-    rolling = rolling,
-    window_size = window_size,
-    step_size = step_size,
-    offset = offset,
-    in_sample = in_sample,
-    verbose = FALSE
+test_that("create_portfolioReturns handles empty data gracefully", {
+  # Empty data frame
+  data_empty <- tibble(
+    stock_id = integer(),
+    date = as.Date(character()),
+    return_label = numeric()
   )
 
-  # Check that the result is a valid portfolioReturns object
-  expect_s3_class(result, "portfolioReturns")
+  pf <- create_portfolioReturns(data_empty, "return_label")
 
-  # Check that weight_models, weights, and portfolio_returns are present in the portfolio
-  expect_true("models" %in% names(result))
-  expect_true("weights" %in% names(result))
-  expect_true("portfolio_returns" %in% names(result))
+  # Check class
+  expect_s3_class(pf, "portfolioReturns")
 
-  # Check for the correct number of rows in the weights and portfolio_returns
-  expect_equal(nrow(result$weights), nrow(test_data_ml))
-  expect_equal(nrow(result$portfolio_returns), length(unique(test_data_ml$date)))
-
-  # Check that the weight model dummy_weights_func_1 exists
-  expect_true("dummy_weights_func_1" %in% colnames(result$weights))
-  expect_true("dummy_weights_func_1" %in% colnames(result$portfolio_returns))
+  # Check components are empty
+  expect_equal(nrow(pf$weights), 0)
+  expect_null(pf$delta_weights)
+  expect_null(pf$benchmark_weights)
+  expect_equal(nrow(pf$actual_returns), 0)
+  expect_equal(nrow(pf$portfolio_returns), 0)
+  expect_null(pf$benchmark_returns)
 })
+
+####################################################################################################
+
+test_that("add_weight_model adds model correctly to non-benchmark portfolio", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -1, 1)) %>%
+    arrange(stock_id,date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  # Check that model is added
+  expect_true("Model_A_1" %in% names(pf_updated$models))
+
+  # Check weights updated
+  expect_true("Model_A_1" %in% names(pf_updated$weights))
+  expect_equal(pf_updated$weights$Model_A_1, new_weights$weight)
+
+  # Check portfolio_returns updated
+  expected_returns <- pf_updated$weights %>%
+    inner_join(pf_updated$actual_returns, by = c("stock_id", "date")) %>%
+    group_by(date) %>%
+    summarize(portfolio_return = sum(Model_A_1 * actual_return, na.rm = TRUE)) %>%
+    arrange(date) %>%
+    pull(portfolio_return)
+
+  model_returns <- pf_updated$portfolio_returns %>%
+    pull("Model_A_1")
+
+  expect_equal(model_returns, expected_returns)
+})
+
+test_that("add_weight_model adds model correctly to benchmark portfolio", {
+  # Sample data with benchmark
+  test_data_ml2 <- test_data_ml %>% mutate(benchmark=runif(nrow(test_data_ml)))
+
+  # Create portfolioReturns object with benchmark
+  pf <- create_portfolioReturns(test_data_ml2, return_label, "benchmark")
+  # New delta weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -0.1, 0.1)) %>%
+    arrange(stock_id, date)
+
+  # Benchmark weights
+  benchmark_weights <- pf$benchmark_weights
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_B",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  # Check that model is added
+  expect_true("Model_B_1" %in% names(pf_updated$models))
+
+  # Check delta_weights updated
+  expect_true("Model_B_1" %in% names(pf_updated$delta_weights))
+  expect_equal(pf_updated$delta_weights$Model_B_1, new_weights$weight)
+
+  # Check weights = benchmark_weight + delta_weight
+  expected_weights <- pf_updated$benchmark_weights %>%
+    inner_join(pf_updated$delta_weights, by = c("stock_id", "date")) %>%
+    mutate(weight = benchmark_weight + Model_B_1) %>%
+    select(stock_id, date, weight) %>%
+    arrange(stock_id,date)
+
+  expect_equal(pf_updated$weights$Model_B_1, expected_weights$weight)
+
+  # Check portfolio_returns updated
+  expected_returns <- pf_updated$weights %>%
+    inner_join(pf$actual_returns, by = c("stock_id", "date")) %>%
+    group_by(date) %>%
+    summarize(portfolio_return = sum(Model_B_1 * actual_return, na.rm = TRUE)) %>%
+    arrange(date) %>%
+    pull(portfolio_return)
+
+  model_returns <- pf_updated$portfolio_returns %>%
+    pull("Model_B_1")
+
+  expect_equal(model_returns, expected_returns)
+})
+
+
+###################################################################################
+# tests/testthat/test_postprocessing_portfolios.R
+
+# Helper function to create a portfolioReturns object with a weight model
+test_that("postprocessing_portfolios applies set_weightsum correctly to non-benchmark portfolio", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -1, 1)) %>%
+    arrange(date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config = list("keras_super",config=list("layer"="deep"))
+  )
+
+  config <- list(
+    list(
+      operation = "set_weightsum",
+      sum = 1,
+      allow_short_sale = FALSE
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Check that weights sum to 1 per date
+  weights_sum <- pf_processed$weights %>%
+    select(1,2,weight=3) %>%
+    group_by(date) %>%
+    summarize(total = sum(weight, na.rm = TRUE)) %>%
+    pull(total)
+
+  expect_true(all(abs(weights_sum - 1) < 1e-6))
+
+  # Check no negative weights
+  expect_true(all(pull(pf_processed$weights,3) >= 0))
+})
+
+test_that("postprocessing_portfolios applies flatten_weights correctly", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -1, 1)) %>%
+    arrange(date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  config <- list(
+    list(
+      operation = "flatten_weights",
+      l1 = 0,
+      l2 = 0,
+      mix = 0
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Check that weights have been reduced
+  original_weights <- pull(pf_updated$weights,3)
+  processed_weights <- pull(pf_processed$weights,3)
+  # original_weights - processed_weights
+  expect_true(all(processed_weights <= original_weights + 1e-6))  # Allow small numerical differences
+})
+
+test_that("postprocessing_portfolios applies reduce_turnover correctly", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -1, 1)) %>%
+    arrange(date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  # Simulate previous weights by adding another model
+  previous_weights <- pf_updated$weights
+
+  config <- list(
+    list(
+      operation = "reduce_turnover",
+      method = "linear",
+      smoothing_factor = 0.2
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Check that weights have been smoothed
+  # Since we have only two dates, previous weights are assumed to be 'Model_prev'
+  # and current weights are the main 'weight' column.
+
+  expected_weights <- pf_updated$weights %>%
+    select(1,2,weight=3) %>%
+    arrange(stock_id, date) %>%
+    group_by(stock_id) %>%
+    mutate(weight_prev = dplyr::lag(weight, default = weight[1])) %>%
+    mutate(weight_expected = weight_prev + (weight - weight_prev) * (1 - 0.2)) %>%
+    ungroup() %>%
+    pull(weight_expected)
+
+  expect_equal(round(pull(pf_processed$weights,3), 6), round(expected_weights, 6))
+})
+
+test_that("postprocessing_portfolios applies increase_diversification correctly", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=ifelse(stock_id==1,0.8,0.1)) %>%
+    arrange(date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  config <- list(
+    list(
+      operation = "increase_diversification",
+      hh_target = 0.3
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Calculate new HHI per date
+  hhi_new <- pf_processed$weights %>%
+    select(1,2,weight=3) %>%
+    group_by(date) %>%
+    summarize(hhi = sum(weight^2, na.rm = TRUE)) %>%
+    pull(hhi)
+
+  expect_true(all(hhi_new <= 0.3 + 1e-6))
+})
+
+test_that("postprocessing_portfolios handles multiple operations correctly", {
+  pf <- create_portfolioReturns(test_data_ml, return_label)
+
+  # New weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=ifelse(stock_id==1,0.8,0.1)) %>%
+    arrange(date)
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_A",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  config <- list(
+    list(
+      operation = "set_weightsum",
+      sum = 1,
+      allow_short_sale = FALSE
+    ),
+    list(
+      operation = "flatten_weights",
+      l1 = 0.02,
+      l2 = 0.05,
+      mix = 0.5
+    ),
+    list(
+      operation = "reduce_turnover",
+      method = "exponential",
+      smoothing_factor = 0.3
+    ),
+    list(
+      operation = "increase_diversification",
+      hh_target = 0.3
+    ),
+    list(
+      operation = "set_weightsum",
+      sum = 1,
+      allow_short_sale = FALSE
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Check weights sum to 1 per date
+  weights_sum <- pf_processed$weights %>%
+    select(1,2,weight=3) %>%
+    group_by(date) %>%
+    summarize(total = sum(weight, na.rm = TRUE)) %>%
+    pull(total)
+
+  expect_true(all(abs(weights_sum - 1) < 1e-6))
+
+  # Check no negative weights
+  expect_true(all(pull(pf_processed$weights,3) >= 0))
+
+  # Check HHI meets target
+  hhi_new <- pf_processed$weights %>%
+    select(1,2,weight=3) %>%
+    group_by(date) %>%
+    summarize(hhi = sum(weight^2, na.rm = TRUE)) %>%
+    pull(hhi)
+
+  expect_true(all(hhi_new <= 0.66 + 1e-6))
+})
+
+test_that("postprocessing_portfolios handles benchmark portfolio correctly", {
+  # Sample data with benchmark
+  test_data_ml2 <- test_data_ml %>% mutate(benchmark=runif(nrow(test_data_ml)))
+
+  # Create portfolioReturns object with benchmark
+  pf <- create_portfolioReturns(test_data_ml2, return_label, "benchmark")
+  # New delta weights
+  new_weights <- test_data_ml %>%
+    select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -0.1, 0.1)) %>%
+    arrange(stock_id, date)
+
+  # Benchmark weights
+  benchmark_weights <- pf$benchmark_weights
+
+  # Add weight model
+  pf_updated <- add_weight_model(
+    portfolio_object = pf,
+    model_name = "Model_B",
+    new_weights = new_weights,
+    config=list()
+  )
+
+  config <- list(
+    list(
+      operation = "flatten_weights",
+      l1 = 0.02,
+      l2 = 0.05,
+      mix = 0.5
+    ),
+    list(
+      operation = "set_weightsum",
+      sum = 0,
+      min_sum = 0,
+      max_sum = 1,
+      min_weight = -0.1,
+      max_weight = 0.1,
+      allow_short_sale = TRUE
+    )
+  )
+
+  pf_processed <- postprocessing_portfolios(pf_updated, config)
+
+  # Check that delta_weights are updated
+  expect_true("Model_B_1" %in% names(pf_processed$delta_weights))
+
+  # Check that weights sum to 1 per date
+  weights_sum <- pf_processed$delta_weights %>%
+    select(1,2,weight=3) %>%
+    group_by(date) %>%
+    summarize(total = sum(weight, na.rm = TRUE)) %>%
+    pull(total)
+
+  expect_true(all(abs(weights_sum) < 1e-1))
+
+  # Check no weights<>1
+  expect_true(all(pull(pf_processed$delta_weights,3) < 1))
+
+  # Check portfolio_returns are recalculated
+  expected_returns <- pf_processed$weights %>%
+    select(1,2,weight=3) %>%
+    inner_join(pf$actual_returns, by = c("date", "stock_id")) %>%
+    group_by(date) %>%
+    summarize(portfolio_return = sum(weight * actual_return, na.rm = TRUE)) %>%
+    arrange(date) %>%
+    pull(portfolio_return)
+
+  model_returns <- pf_processed$portfolio_returns %>%
+    pull(2)
+
+  expect_equal(model_returns, expected_returns)
+})
+

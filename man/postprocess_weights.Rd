@@ -4,7 +4,13 @@
 \alias{postprocess_weights}
 \title{Postprocess Weights (Masking and Box Constraints)}
 \usage{
-postprocess_weights(weight_predictions, original_data, config)
+postprocess_weights(
+  weight_predictions,
+  original_data,
+  benchmark_weighst = NULL,
+  mask_label = NULL,
+  config
+)
 }
 \arguments{
 \item{weight_predictions}{Tibble. A data frame containing stock IDs, dates, and predicted weights.}
