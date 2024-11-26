@@ -143,6 +143,21 @@ backtesting_weights <- function(data, return_label, benchmark_label = NULL, mask
   dates <- data %>% dplyr::distinct(date) %>% dplyr::arrange(date) %>% dplyr::pull(date)
   indices <- select_dates_by_offset(dates, window_size, step_size, offset, rolling)
 
+  # in sample check and add to indices
+  if (in_sample) {
+    # Assuming select_dates_by_offset returns a data frame with columns: training_start, training_end, prediction_start, prediction_end
+    indices <- dplyr::bind_rows(
+      tibble::tibble(
+        training_start = indices$training_start[1],
+        training_end = indices$training_end[1],
+        prediction_start = indices$training_start[1],
+        prediction_end = indices$prediction_start[1],
+        prediction_phase = "IS"
+      ),
+      indices
+    )
+  }
+
   # Create masking tibble
   mask <- data_post %>%  filter(mask==1) %>% select(stock_id,date)
 
@@ -206,7 +221,9 @@ backtesting_weights <- function(data, return_label, benchmark_label = NULL, mask
           }
           return(result)
         },
-        .options = furrr::furrr_options(seed = TRUE)
+        .options = furrr::furrr_options(seed = TRUE),
+        .future.globals=TRUE,
+        .progress=TRUE
       )
 
       # Finish progress bar
@@ -219,7 +236,8 @@ backtesting_weights <- function(data, return_label, benchmark_label = NULL, mask
       # final_weights <- postprocess_weights(weight_predictions, data_post, model_config)
 
       # Add the weights to the portfolio object
-      portfolio_object <- add_weight_model(portfolio_object, model_name, model_config, weight_predictions)
+      model_config$indices <- indices
+      portfolio_object <- add_weight_model(portfolio_object, model_name, weight_predictions, model_config)
 
       if (verbose) {
         cli::cli_alert_success("    Successfully added weights for configuration '{config_name}' of model '{model_name}'.")

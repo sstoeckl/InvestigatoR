@@ -446,7 +446,7 @@ test_that("postprocessing_portfolios handles benchmark portfolio correctly", {
   test_data_ml2 <- test_data_ml %>% mutate(benchmark=runif(nrow(test_data_ml)))
 
   # Create portfolioReturns object with benchmark
-  pf <- create_portfolioReturns(test_data_ml2, return_label, "benchmark")
+    pf <- create_portfolioReturns(test_data_ml2, return_label, "benchmark")
   # New delta weights
   new_weights <- test_data_ml %>%
     select(stock_id,date) %>%  mutate(weight=runif(nrow(test_data_ml), -0.1, 0.1)) %>%

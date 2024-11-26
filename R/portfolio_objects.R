@@ -431,7 +431,7 @@ add_weight_model <- function(portfolio_object, model_name, new_weights, config, 
 
   # Validate new_weights
   checkmate::assert_data_frame(new_weights, any.missing = FALSE)
-  checkmate::assert_subset(c("date", "stock_id", "weight"), choices = names(new_weights))
+  checkmate::assert_subset(c("date", "stock_id", "pred_weight"), choices = names(new_weights))
 
   # Check if the portfolio has a benchmark
   has_benchmark <- !is.null(portfolio_object$benchmark_returns) && !is.null(portfolio_object$delta_weights)
@@ -460,19 +460,12 @@ add_weight_model <- function(portfolio_object, model_name, new_weights, config, 
   if (has_benchmark) {
     # Benchmark Portfolio Handling
 
-    # Validate benchmark_weights
-    checkmate::assert_data_frame(benchmark_weights, any.missing = FALSE)
-    checkmate::assert_subset(c("date", "stock_id", "benchmark_weight"), choices = names(benchmark_weights))
-
     # Ensure new_weights and benchmark_weights have matching dates and stock_ids
     actual_dates <- unique(portfolio_object$actual_returns$date)
     actual_stock_ids <- unique(portfolio_object$actual_returns$stock_id)
 
     checkmate::assert_subset(new_weights$date, choices = actual_dates, empty.ok = FALSE)
     checkmate::assert_subset(new_weights$stock_id, choices = actual_stock_ids, empty.ok = FALSE)
-
-    checkmate::assert_subset(benchmark_weights$date, choices = actual_dates, empty.ok = FALSE)
-    checkmate::assert_subset(benchmark_weights$stock_id, choices = actual_stock_ids, empty.ok = FALSE)
 
     # Prepare new weights and join with existing weights
     names(new_weights)[3] <- model_id
@@ -481,7 +474,7 @@ add_weight_model <- function(portfolio_object, model_name, new_weights, config, 
       arrange(stock_id, date)
 
     # Corrected typo from 'benachmark_weights' to 'benchmark_weights'
-    benchmark_name <- names(benchmark_weights)[3]  # Assuming the third column is 'benchmark_weight'
+    benchmark_name <- names(portfolio_object$benchmark_weights)[3]  # Assuming the third column is 'benchmark_weight'
 
     # Calculate final_weights = benchmark_weights + delta_weights
     final_weights <- portfolio_object$benchmark_weights %>%
@@ -868,7 +861,7 @@ postprocessing_portfolios <- function(portfolio_object, config) {
         cols = all_of(model_ids),
         names_to = "model_id",
         values_to = "weight"
-      )
+      ) %>% na.omit()
     } else {
     # Join weights_long with delta_weights_long
     weights_long <- portfolio_object$weights %>%
@@ -876,7 +869,7 @@ postprocessing_portfolios <- function(portfolio_object, config) {
         cols = all_of(model_ids),
         names_to = "model_id",
         values_to = "weight"
-      )
+      ) %>% na.omit()
   }
 
   # -----------------------------
@@ -989,7 +982,7 @@ postprocessing_portfolios <- function(portfolio_object, config) {
       # remove everything after "_" from name using gsub
       nn2 <- gsub("_[0-9]","",nn)
 
-      portfolio_object <- add_weight_model(portfolio_object, nn2, weights_wide_processed %>% select(1,2,weight=all_of(nn)),
+      portfolio_object <- add_weight_model(portfolio_object, nn2, weights_wide_processed %>% select(1,2,pred_weight=all_of(nn)),
                                            config=portfolio_object$models[[nn]],
                                            # bind older postprocessing_config with new one
                                            postprocessing_config=c(portfolio_object$postprocessing_config[[nn]],
@@ -1013,7 +1006,7 @@ postprocessing_portfolios <- function(portfolio_object, config) {
       # remove everything after "_" from name using gsub
       nn2 <- gsub("_[0-9]","",nn)
 
-      portfolio_object <- add_weight_model(portfolio_object, nn2, weights_wide_processed %>% select(1,2,weight=all_of(nn)),
+      portfolio_object <- add_weight_model(portfolio_object, nn2, weights_wide_processed %>% select(1,2,pred_weight=all_of(nn)),
                                            config=pf_configs[[nn]]$config,
                                            # bind older postprocessing_config with new one
                                            postprocessing_config=c(pppf_configs[[nn]],
@@ -1038,7 +1031,7 @@ postprocessing_portfolios <- function(portfolio_object, config) {
 #' Define the summary method for 'portfolioReturns' class
 #'
 #' @param portfolio_object A portfolioReturns object
-#' @param type default=NULL (standrad evaluation), Alternative: tq_performance_functions
+#' @param type default=NULL (standard evaluation), Alternative: tq_performance_functions
 #'
 #' @return A summary satistics of the portfolio returns
 #'
@@ -1048,9 +1041,9 @@ postprocessing_portfolios <- function(portfolio_object, config) {
 #'
 #' @export
 summary.portfolioReturns <- function(portfolio_object, type=NULL) {
-  returns_data <- portfolio_object$portfolio_returns
-  weights_data <- portfolio_object$weights
-  actual_data <- portfolio_object$actual_returns
+    returns_data <- portfolio_object$portfolio_returns
+    weights_data <- portfolio_object$weights
+    actual_data <- portfolio_object$actual_returns
     # long_format
   returns_data_long <- returns_data %>%
     tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns")
@@ -1108,4 +1101,65 @@ plot.portfolioReturns <- function(portfolio_object, type = NULL) {
     plot_func(xts_data)
   }
 }
+
+#' Combine portfolioReturns Objects
+#'
+#' Combines multiple `portfolioReturns` objects into a single combined object. Validates that
+#' all objects have consistent structure (either with or without benchmarks).
+#'
+#' @param portfolio_list A list of `portfolioReturns` objects to combine.
+#'
+#' @return A combined `portfolioReturns` object.
+#' @export
+combine_portfolioReturns <- function(portfolio_list) {
+  # Validate input is a list of portfolioReturns objects
+  checkmate::assert_list(portfolio_list, any.missing = FALSE)
+  if (!all(sapply(portfolio_list, function(x) inherits(x, "portfolioReturns")))) {
+    cli::cli_abort("All objects in `portfolio_list` must be of class `portfolioReturns`.")
+  }
+
+  # Check if all portfolioReturns objects have consistent benchmark structure
+  has_benchmark <- sapply(portfolio_list, function(pf) !is.null(pf$benchmark_returns))
+  if (!all(has_benchmark == has_benchmark[1])) {
+    cli::cli_abort("All `portfolioReturns` objects must either have or not have a benchmark.")
+  }
+
+  # Start with the first portfolio object
+  combined_portfolio <- portfolio_list[[1]]
+  is_benchmark_portfolio <- has_benchmark[1]
+
+  # Iterate through remaining portfolio objects to combine
+  for (i in 2:length(portfolio_list)) {
+    current_portfolio <- portfolio_list[[i]]
+
+    # Combine models
+    for (model_id in names(current_portfolio$models)) {
+      # Determine the appropriate weights
+      if (is_benchmark_portfolio) {
+        # For benchmark portfolios, the new weights are delta weights
+        new_weights <- current_portfolio$delta_weights %>%
+          dplyr::select(stock_id, date, pred_weight=!!model_id)
+      } else {
+        # For non-benchmark portfolios, the new weights are the portfolio weights
+        new_weights <- current_portfolio$weights %>%
+          dplyr::select(stock_id, date, pred_weight=!!model_id)
+      }
+
+      # Add the model to the combined portfolio
+      combined_portfolio <- add_weight_model(
+        portfolio_object = combined_portfolio,
+        model_name = current_portfolio$models[[model_id]]$model_name,
+        new_weights = new_weights,
+        config = current_portfolio$models[[model_id]]$config,
+        postprocessing_config = current_portfolio$postprocessing_config[[model_id]]
+      )
+    }
+  }
+
+  # Inform the user
+  cli::cli_alert_success("Combined {length(portfolio_list)} portfolioReturns objects into one.")
+
+  return(combined_portfolio)
+}
+
 

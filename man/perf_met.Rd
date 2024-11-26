@@ -4,14 +4,14 @@
 \alias{perf_met}
 \title{Helper function to create performance metrics for a given set of returns, weights, and actual data}
 \usage{
-perf_met(returns_data, weights_data, actual_data)
+perf_met(returns_data, weights_data, actual_returns)
 }
 \arguments{
 \item{returns_data}{return data}
 
 \item{weights_data}{weights data}
 
-\item{actual_data}{actual realized returns}
+\item{actual_returns}{actual realized returns}
 }
 \value{
 A tibble with columns portfolio, mean, sd, SR, VaR_5, turnover, and hit_ratio

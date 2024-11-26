@@ -134,7 +134,7 @@ weightpred_map <- function(t, data_subset, indices, mask, model_function, model_
   # Set training and test data
   train_data <- data_subset %>%
     dplyr::filter(date >= indices$training_start[t], date <= indices$training_end[t]) %>%
-    dplyr::right_join(mask %>%  filter(date==indices$training_end[t]), by = c("stock_id","date")) # only include index stocks at training date for training
+    dplyr::right_join(mask %>%  filter(date==indices$training_end[t]) %>%  select(stock_id), by = c("stock_id")) # only include index stocks at training date for training
   return_label <- colnames(data_subset)[3]  # The return label is in the third
   test_data <- data_subset %>%
     dplyr::filter(date >= indices$prediction_start[t], date < indices$prediction_end[t]) %>%

@@ -114,7 +114,7 @@ select_dates_by_offset <- function(dates, window_size, step_size, offset, rollin
 #'
 #' @param returns_data return data
 #' @param weights_data weights data
-#' @param actual_data actual realized returns
+#' @param actual_returns actual realized returns
 #'
 #' @importFrom dplyr group_by summarise left_join mutate
 #' @importFrom tidyr pivot_longer
@@ -122,7 +122,7 @@ select_dates_by_offset <- function(dates, window_size, step_size, offset, rollin
 #' @return A tibble with columns portfolio, mean, sd, SR, VaR_5, turnover, and hit_ratio
 #' @export
 #'
-perf_met <- function(returns_data, weights_data, actual_data){
+perf_met <- function(returns_data, weights_data, actual_returns){
 
   stats <- returns_data |>
     tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "return") |>
@@ -131,13 +131,14 @@ perf_met <- function(returns_data, weights_data, actual_data){
 
   turnover <- weights_data |>
     tidyr::pivot_longer(cols = 3:last_col(), names_to = "portfolio", values_to = "weight") |>
-    dplyr::left_join(actual_data, by = c("stock_id","date")) |>
+    dplyr::left_join(actual_returns, by = c("stock_id","date")) |>
     dplyr::group_by(stock_id,portfolio) |>
+    arrange(date) %>%
     dplyr::mutate(prior_weight=dplyr::lag(weight,default = 0)*(1+actual_return)) |>
-    dplyr::group_by(portfolio,date) |>
-    dplyr::mutate(turnover=abs(weight-prior_weight)/sum(prior_weight)) |>
+    group_by(portfolio,date) |>
+    dplyr::mutate(turnover=abs(weight-prior_weight/sum(prior_weight))) |>
     dplyr::group_by(portfolio) |>
-    dplyr::summarise(turnover=sum(turnover),.groups="drop")
+    dplyr::summarise(turnover=mean(turnover,na.rm=TRUE),.groups="drop")
 
   stats <- stats |>
     dplyr::left_join(turnover, by = "portfolio")

@@ -72,12 +72,12 @@
 #' weights <- keras_weights(train_data_ex, test_data_ex, config)
 #' print(weights)
 #' }
-keras_weights <- function(train_data, test_data, config = list()) {
+keras_weights <- function(train_data, test_data, model_config = list()) {
   # train_data <- train_data_ex
   # test_data <- test_data_ex
   # Set the specified Python environment if provided
-  if (!is.null(config$python_env)) {
-    reticulate::use_python(config$python_env, required = TRUE)
+  if (!is.null(model_config$python_env)) {
+    reticulate::use_python(model_config$python_env, required = TRUE)
   }
 
   # Check if Keras and TensorFlow are available
@@ -115,7 +115,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
   input_shape <- ncol(train_x)
 
   # Define seeds for reproducibility and prediction averaging
-  seeds <- config$seeds %||% 0  # If no seeds provided, use NULL
+  seeds <- model_config$seeds %||% 0  # If no seeds provided, use NULL
 
   # Function to build and train the model
   train_model <- function(seed) {
@@ -126,24 +126,24 @@ keras_weights <- function(train_data, test_data, config = list()) {
     if (tensorflow::tf_version() < "2.11") { # not sure about the exact number
       model <- keras_model_sequential()
       model %>%
-        layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation, input_shape = list(input_shape),
-                    kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
-                    kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
-                    bias_initializer = config$layers[[1]]$bias_initializer %||% NULL,
-                    kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
+        layer_dense(units = model_config$layers[[1]]$units, activation = model_config$layers[[1]]$activation, input_shape = list(input_shape),
+                    kernel_initializer = model_config$layers[[1]]$kernel_initializer %||% NULL,
+                    kernel_constraint = model_config$layers[[1]]$kernel_constraint %||% NULL,
+                    bias_initializer = model_config$layers[[1]]$bias_initializer %||% NULL,
+                    kernel_regularizer = model_config$layers[[1]]$kernel_regularizer %||% NULL)
     } else {
-      model <- keras_model_sequential(input_shape = list(input_shape))
+      model <- keras_model_sequential(input_shape = list(as.integer(input_shape)))
       model %>%
-        layer_dense(units = config$layers[[1]]$units, activation = config$layers[[1]]$activation,
-                    kernel_initializer = config$layers[[1]]$kernel_initializer %||% NULL,
-                    kernel_constraint = config$layers[[1]]$kernel_constraint %||% NULL,
-                    bias_initializer = config$layers[[1]]$bias_initializer %||% NULL,
-                    kernel_regularizer = config$layers[[1]]$kernel_regularizer %||% NULL)
+        layer_dense(units = model_config$layers[[1]]$units, activation = model_config$layers[[1]]$activation,
+                    kernel_initializer = model_config$layers[[1]]$kernel_initializer %||% NULL,
+                    kernel_constraint = model_config$layers[[1]]$kernel_constraint %||% NULL,
+                    bias_initializer = model_config$layers[[1]]$bias_initializer %||% NULL,
+                    kernel_regularizer = model_config$layers[[1]]$kernel_regularizer %||% NULL)
     }
 
     # Loop through the config and add layers dynamically
-    for (i in 2:length(config$layers)) {
-      layer <- config$layers[[i]]
+    for (i in 2:length(model_config$layers)) {
+      layer <- model_config$layers[[i]]
       if (layer$type == "dense") {
         model %>%
           layer_dense(
@@ -164,41 +164,41 @@ keras_weights <- function(train_data, test_data, config = list()) {
     }
 
     # Extract optimizer function and its parameters from the config
-    optimizer_name <- config$optimizer$name
+    optimizer_name <- model_config$optimizer$name
     optimizer_func <- match.fun(optimizer_name)
-    optimizer <- do.call(optimizer_func, config$optimizer[-1])  # Remove 'name' and pass the rest of the args
+    optimizer <- do.call(optimizer_func, model_config$optimizer[-1])  # Remove 'name' and pass the rest of the args
 
     # Extract custom metrics from config (if provided)
-    custom_metrics <- config$metrics %||% list()
+    custom_metrics <- model_config$metrics %||% list()
 
     # Extract loss function and its parameters from the config
-    loss_name <- config$loss$name
+    loss_name <- model_config$loss$name
     loss_func <- match.fun(loss_name)
 
     # Set the verbose level (default: 0)
-    verbose_level <- config$verbose %||% 0
+    verbose_level <- model_config$verbose %||% 0
 
     # Compile the model with the optimizer and loss function
     model %>% compile(
-      loss = do.call(loss_func, config$loss[-1]),  # Remove 'name' and pass the rest of the args
+      loss = do.call(loss_func, model_config$loss[-1]),  # Remove 'name' and pass the rest of the args
       optimizer = optimizer,
       metrics = custom_metrics  # Add custom metrics here
     )
 
     # Handle callbacks (e.g., early stopping)
-    callbacks_list <- config$callbacks %||% list()
+    callbacks_list <- model_config$callbacks %||% list()
 
     # Train the model
     history <- model %>% fit(
       train_x, train_y,
-      epochs = config$epochs,
+      epochs = model_config$epochs,
       batch_size = nrow(train_x),
       verbose = verbose_level,
       callbacks = callbacks_list
     )
 
     # Check if plot_training is set in config and plot the training history
-    if (isTRUE(config$plot_training)) {
+    if (isTRUE(model_config$plot_training)) {
       plot(history)
     }
 
@@ -243,7 +243,7 @@ keras_weights <- function(train_data, test_data, config = list()) {
 
 
   # Check if plot_result is TRUE to generate summary table and combined plots
-  if (isTRUE(config$plot_result)) {
+  if (isTRUE(model_config$plot_result)) {
     # Load necessary libraries
 
     # Function to convert history object to a tidy dataframe
@@ -447,7 +447,7 @@ sharpe_ratio_loss <- function(transaction_costs = 0.001, delta = 0.1, lambda = 0
 #' @import tensorflow
 #'
 turnover_metric <- function() {
-  custom_metric("turnover_metric", function(y_true, y_pred) {
+  keras3::custom_metric("turnover_metric", function(y_true, y_pred) {
     # Extract stock_id, date, and actual_return from y_true
     stock_ids <- tf$cast(y_true[, 1], "int32")
     dates <- tf$cast(y_true[, 2], "int32")
@@ -506,7 +506,7 @@ turnover_metric <- function() {
 #' @import tensorflow
 #'
 leverage_metric <- function() {
-  custom_metric("leverage_metric", function(y_true, y_pred) {
+  keras3::custom_metric("leverage_metric", function(y_true, y_pred) {
     # Extract stock_id and date from y_true
     stock_ids <- tf$cast(y_true[, 1], "int32")
     dates <- tf$cast(y_true[, 2], "int32")
@@ -558,7 +558,7 @@ leverage_metric <- function() {
 #' @import tensorflow
 #'
 diversification_metric <- function() {
-  custom_metric("diversification_metric", function(y_true, y_pred) {
+  keras3::custom_metric("diversification_metric", function(y_true, y_pred) {
     # Extract stock_id and date from y_true
     stock_ids <- tf$cast(y_true[, 1], "int32")
     dates <- tf$cast(y_true[, 2], "int32")
@@ -638,7 +638,7 @@ dummy_mse_loss <- function(y_true, y_pred) {
 #' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
 #'
 #' @return A scalar loss value that combines the negative Sharpe ratio difference with L1/L2 regularization.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #' @export
 #'
@@ -757,7 +757,7 @@ sharpe_ratio_difference_loss <- function(lambda_l1 = 0.01,lambda_l2 = 0.01) {
 #' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
 #'
 #' @return A scalar loss value that combines the negative Information Ratio with L1/L2 regularization.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #' @export
 #'
@@ -873,7 +873,7 @@ information_ratio_loss_active_returns <- function(lambda_l1 = 0.01, lambda_l2 = 
 #' @param lambda_l2 Numeric. L2 regularization coefficient (default: 0.01).
 #'
 #' @return A scalar loss value that combines the negative Information Ratio with L1/L2 regularization.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #' @export
 #'
@@ -995,7 +995,7 @@ information_ratio_loss_regression_based <- function(lambda_l1 = 0.01, lambda_l2 
 #' effectively measuring how much the portfolio has deviated from the benchmark in terms of absolute adjustments.
 #'
 #' @return A scalar L1 distance value for the current batch of data.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #' @export
 #'
@@ -1026,7 +1026,7 @@ information_ratio_loss_regression_based <- function(lambda_l1 = 0.01, lambda_l2 
 #' print(metric_value)
 #' }
 distance_from_benchmark_l1_metric <- function() {
-  keras::custom_metric("distance_from_benchmark_l1", function(y_true, y_pred) {
+  keras3::custom_metric("distance_from_benchmark_l1", function(y_true, y_pred) {
     # Extract stock_id, date, benchmark weights from y_true
     stock_ids <- tf$cast(y_true[, 1], "int32")
     dates <- tf$cast(y_true[, 2], "int32")
@@ -1081,7 +1081,7 @@ distance_from_benchmark_l1_metric <- function() {
 #' effectively measuring how much the portfolio has deviated from the benchmark in terms of squared adjustments.
 #'
 #' @return A scalar L2 distance value for the current batch of data.
-#' @import keras
+#' @import keras3
 #' @import tensorflow
 #' @export
 #'
@@ -1112,7 +1112,7 @@ distance_from_benchmark_l1_metric <- function() {
 #' print(metric_value)
 #' }
 distance_from_benchmark_l2_metric <- function() {
-  keras::custom_metric("distance_from_benchmark_l2", function(y_true, y_pred) {
+  keras3::custom_metric("distance_from_benchmark_l2", function(y_true, y_pred) {
     # Extract stock_id, date, benchmark weights from y_true
     stock_ids <- tf$cast(y_true[, 1], "int32")
     dates <- tf$cast(y_true[, 2], "int32")

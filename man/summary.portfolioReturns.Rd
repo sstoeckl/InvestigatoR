@@ -9,7 +9,7 @@
 \arguments{
 \item{portfolio_object}{A portfolioReturns object}
 
-\item{type}{default=NULL (standrad evaluation), Alternative: tq_performance_functions}
+\item{type}{default=NULL (standard evaluation), Alternative: tq_performance_functions}
 }
 \value{
 A summary satistics of the portfolio returns

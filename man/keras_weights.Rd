@@ -4,7 +4,7 @@
 \alias{keras_weights}
 \title{Keras Weight Prediction Function with Benchmark Handling}
 \usage{
-keras_weights(train_data, test_data, config = list())
+keras_weights(train_data, test_data, model_config = list())
 }
 \arguments{
 \item{train_data}{A data frame with columns: \code{stock_id}, \code{date}, \code{benchmark}, \code{actual_return}, and features.}
