@@ -95,7 +95,7 @@ keras_weights <- function(train_data, test_data, model_config = list()) {
   # Input validation
   checkmate::assert_data_frame(train_data, min.rows = 1, any.missing = FALSE)
   checkmate::assert_data_frame(test_data, min.rows = 1, any.missing = FALSE)
-  checkmate::assert_list(config)
+  checkmate::assert_list(model_config)
 
   # Extract stock_id and date
   stock_id <- train_data$stock_id
