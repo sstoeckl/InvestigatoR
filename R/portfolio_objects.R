@@ -1106,23 +1106,25 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
 
   # Handle benchmark: use external or equally weighted as default
   if (!is.null(benchmark_data)) {
+    benchmark <- benchmark_data
+    # add benchmark to portfolio_returns
+    portfolio_returns <- portfolio_returns %>%
+      left_join(benchmark, by = "date")
+  } else {
     # if no benchmark is given, check wether portfolio object comes with own benchmark
     if (portfolio_object$benchmark_returns %>% nrow() > 0){
       benchmark <- portfolio_object$benchmark_returns
+      # add benchmark to portfolio_returns
+      portfolio_returns <- portfolio_returns %>%
+        left_join(benchmark, by = "date")
     } else {
-    benchmark <- benchmark_data
-    }
-  } else {
     # Compute equally weighted portfolio as benchmark
     ew_returns <- portfolio_object$actual_returns %>%
       group_by(date) %>%
       summarise(benchmark = mean(actual_return, na.rm = TRUE), .groups = 'drop')
     benchmark <- ew_returns
+    }
   }
-
-  # add benchmark to portfolio_returns
-  portfolio_returns <- portfolio_returns %>%
-    left_join(benchmark, by = "date")
 
   # Convert to xts format for PerformanceAnalytics
   portfolio_xts <- portfolio_returns %>%
@@ -1328,12 +1330,15 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
       summarize(benchmark_return = sum(actual_return * benchmark_weight, na.rm = TRUE), .groups = "drop")
   }
 
-  # add benchmark returns to portfolio returns
-  portfolio_returns <- portfolio_returns %>%
-    left_join(benchmark_returns|> rename(benchmark=benchmark_return), by = "date")
-  # and to weights
-  weights <- weights %>%
-    left_join(benchmark_weights |> rename(benchmark=benchmark_weight), by = c("stock_id","date"))
+  # add benchmark returns to portfolio returns only if bm object or expl. given
+  if (!is.null(benchmark_returns) && !is.null(benchmark_weights)){
+    portfolio_returns <- portfolio_returns %>%
+      left_join(benchmark_returns|> rename(benchmark=benchmark_return), by = "date")
+    # and to weights
+    weights <- weights %>%
+      left_join(benchmark_weights |> rename(benchmark=benchmark_weight), by = c("stock_id","date"))
+  }
+
 
   # Convert data to xts for PerformanceAnalytics compatibility
   portfolio_xts <- timetk::tk_xts(portfolio_returns, silent = TRUE)
