@@ -1112,7 +1112,7 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
       left_join(benchmark, by = "date")
   } else {
     # if no benchmark is given, check wether portfolio object comes with own benchmark
-    if (portfolio_object$benchmark_returns %>% nrow() > 0){
+    if (!is.null(portfolio_object$benchmark_returns)){
       benchmark <- portfolio_object$benchmark_returns
       # add benchmark to portfolio_returns
       portfolio_returns <- portfolio_returns %>%
@@ -1331,7 +1331,7 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
   }
 
   # add benchmark returns to portfolio returns only if bm object or expl. given
-  if (!is.null(benchmark_returns) && !is.null(benchmark_weights)){
+  if (!is.null(portfolio_object$benchmark_returns) && !is.null(portfolio_object$benchmark_weights)){
     portfolio_returns <- portfolio_returns %>%
       left_join(benchmark_returns|> rename(benchmark=benchmark_return), by = "date")
     # and to weights

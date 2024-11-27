@@ -5,6 +5,7 @@ date: "`r Sys.Date()`"
 output:
   rmarkdown::html_vignette:
     toc: true
+  rmarkdown::pdf_document
 vignette: >
   %\VignetteIndexEntry{Backtesting Portfolio Weight Optimization}
   %\VignetteEngine{knitr::rmarkdown}
@@ -214,12 +215,6 @@ We backtest the portfolio using the unconstrained model. This involves:
 
 ```{r setupn_backtest_unconstrained, cache=TRUE}
 # Define the portfolio configuration for the unconstrained model
-pf_config_unconstrained <- list(
-  keras_weights_simple = list(
-    weight_func = "keras_weights",
-    config1 = config_keras_simple
-  )
-)
 return_label <- "R1M_Usd"
 features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
 rolling <- TRUE
@@ -238,7 +233,7 @@ portfolios_raw_unconstrained <- backtesting_weights(
   data = data_ml_red, 
   return_label = return_label, 
   features = features,
-  pf_config = pf_config_unconstrained,
+  pf_config = list(keras_weights_simple = list(weight_func = "keras_weights",config1 = config_keras_simple)),
   rolling = rolling, 
   window_size = window_size, 
   step_size = step_size, 
@@ -307,7 +302,6 @@ tt <- summary.weights(portfolios_postprocessed, print=TRUE)
 # Evaluate performance after postprocessing
 tt <- summary.performance(portfolios_postprocessed, test=TRUE, print=TRUE)
 tt <- summary.performance2(portfolios_postprocessed, test=TRUE, print=TRUE)
-
 ```
 
 ---
@@ -322,7 +316,7 @@ tt <- summary.performance2(portfolios_postprocessed, test=TRUE, print=TRUE)
 2. **After Postprocessing**:
 
    - Weight distributions improved significantly, adhering to realistic constraints.
-   - Diversification and turnover metrics became more acceptable, making the portfolio viable for real-world implementation.
+   -47 Diversification and turnover metrics became more acceptable, making the portfolio viable for real-world implementation.
 
 ---
 
@@ -346,31 +340,15 @@ The **`activation_box_sigmoid`** ensures:
 
 ```{r activation_box_sigmoid, cache=TRUE}
 # Configuration with long-only activation
-config_box_sigmoid <- list(
-  layers = list(
-    list(type = "dense", units = 6, activation = "relu"),
-    list(type = "dense", units = 3, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
-  ),
-  loss = list(name = "sharpe_ratio_loss"),
-  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
-  verbose = 0,
-  seeds = c(42)
-)
+config_box_sigmoid <- config_keras_simple
+config_box_sigmoid$layers$`3`$activation <- activation_box_sigmoid(min_weight = 0, max_weight = 0.2)
 
 # Backtest with box-sigmoid activation
-pf_config_box_sigmoid <- list(
-  keras_weights_box_sigmoid = list(
-    weight_func = "keras_weights",
-    config1 = config_box_sigmoid
-  )
-)
 portfolios_box_sigmoid <- backtesting_weights(
   data = data_ml_red, 
   return_label = return_label, 
   features = features, 
-  pf_config = pf_config_box_sigmoid,
+  pf_config = list(keras_weights_box_sigmoid=list(weight_func = "keras_weights",config1 = config_box_sigmoid)),
   rolling = rolling, 
   window_size = window_size, 
   step_size = step_size, 
@@ -392,32 +370,15 @@ The **`activation_box_tanh`** ensures:
 
 
 ```{r activation_box_tanh, cache=TRUE}
-# Configuration with sum constraints
-config_box_tanh <- list(
-  layers = list(
-    list(type = "dense", units = 6, activation = "relu"),
-    list(type = "dense", units = 3, activation = "relu"),
-    list(type = "dense", units = 1, activation = activation_box_tanh(min_weight = 0, max_weight = 0.2))
-  ),
-  loss = list(name = "sharpe_ratio_loss"),
-  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
-  verbose = 0,
-  seeds = c(42)
-)
+# Configuration with long-only constraints
+config_box_tanh <- config_box_sigmoid
+config_box_tanh$layers$`3`$activation <- activation_box_tanh(min_weight = 0, max_weight = 0.2)
 
-# Backtest with box-tanh activation
-pf_config_box_tanh <- list(
-  keras_weights_box_tanh = list(
-    weight_func = "keras_weights",
-    config1 = config_box_tanh
-  )
-)
 portfolios_box_tanh <- backtesting_weights(
   data = data_ml_red, 
   return_label = return_label, 
   features = features, 
-  pf_config = pf_config_box_tanh,
+  pf_config = list(keras_weights_box_tanh = list(weight_func = "keras_weights",config1 = config_box_tanh)),
   rolling = rolling, 
   window_size = window_size, 
   step_size = step_size, 
