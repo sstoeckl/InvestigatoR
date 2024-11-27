@@ -258,3 +258,126 @@ ensure_config <- function(config, default_params) {
   }
   return(config)
 }#' Check for Missing Values
+
+#' Memmel-Corrected Sharpe Ratio Test
+#'
+#' Tests Sharpe ratios (SR) of two portfolios for significant differences,
+#' based on the Jobson and Korkie (1981) method with Memmel's (2003) correction.
+#'
+#' @param x A numeric vector or xts object representing the returns of portfolio x.
+#' @param y A numeric vector or xts object representing the returns of portfolio y (benchmark).
+#' @param alternative A string specifying the alternative hypothesis:
+#'   "two.sided" (default), "greater" (Ha: Sx > Sy), or "less" (Ha: Sx < Sy).
+#'
+#' @return A list containing the test statistic (`f`), p-value (`p`),
+#'   Sharpe ratio of portfolio x (`SRx`), Sharpe ratio of portfolio y (`SRy`),
+#'   and the alternative hypothesis (`alternative`).
+#'
+#' @examples
+#' # Example usage
+#' x <- rnorm(100, mean = 0.01, sd = 0.02)
+#' y <- rnorm(100, mean = 0.005, sd = 0.02)
+#' result <- MemmelSharpeTest(x, y, alternative = "greater")
+#' print(result)
+#'
+#' @export
+MemmelSharpeTest <- function(x, y, alternative = "two.sided") {
+  # Validate inputs
+  if (!is.numeric(x) || !is.numeric(y)) {
+    stop("Both 'x' and 'y' must be numeric vectors.")
+  }
+
+  if (!alternative %in% c("two.sided", "greater", "less")) {
+    stop("The 'alternative' parameter must be one of 'two.sided', 'greater', or 'less'.")
+  }
+
+  # Remove NA cases from x and y
+  valid_indices <- complete.cases(x, y)
+  x <- x[valid_indices]
+  y <- y[valid_indices]
+
+  # Calculate sample size
+  obsPort <- length(x)
+
+  # Calculate means and covariance matrix
+  avgPort <- colMeans(cbind(x, y), na.rm = TRUE)
+  covPort <- cov(cbind(x, y), use = "pairwise.complete.obs")
+
+  # Calculate standard error using Memmel's correction
+  sePort <- (2 * covPort[1, 1] * covPort[2, 2] -
+               2 * sqrt(covPort[1, 1] * covPort[2, 2]) * covPort[1, 2] +
+               (avgPort[1]^2) * covPort[2, 2] / 2 +
+               (avgPort[2]^2) * covPort[1, 1] / 2 -
+               avgPort[1] * avgPort[2] * (covPort[1, 2]^2) /
+               sqrt(covPort[1, 1] * covPort[2, 2])) / obsPort
+
+  # Calculate test statistic
+  f <- (avgPort[1] * sqrt(covPort[2, 2]) - avgPort[2] * sqrt(covPort[1, 1])) / sqrt(sePort)
+
+  # Calculate p-value based on the alternative hypothesis
+  p <- if (alternative == "less") {
+    pnorm(f)
+  } else if (alternative == "greater") {
+    pnorm(-f)
+  } else {
+    2 * pnorm(-abs(f))
+  }
+
+  # Calculate Sharpe ratios
+  SRx <- avgPort[1] / sqrt(covPort[1, 1])
+  SRy <- avgPort[2] / sqrt(covPort[2, 2])
+
+  # Return results
+  list(
+    f = f,
+    p = p,
+    SRx = SRx,
+    SRy = SRy,
+    alternative = alternative
+  )
+}
+#' Calculate Active Share
+#'
+#' @param weights Portfolio weights data frame.
+#' @param benchmark_weights Benchmark weights data frame.
+#'
+#' @return Active share value per portfolio per date.
+calculate_active_share <- function(weights, benchmark_weights) {
+  # Merge portfolio and benchmark weights
+  merged_weights <- weights %>%
+    left_join(benchmark_weights, by = c("date", "stock_id")) %>%
+    mutate(weight_diff = abs(weight - benchmark_weight)) %>%
+    group_by(date) %>%
+    summarise(active_share = sum(weight_diff, na.rm = TRUE) / 2, .groups = "drop") |>
+    summarise(overall_active_share = mean(active_share, na.rm = TRUE)) %>%
+    pull(overall_active_share)
+}
+#' Calculate Turnover
+#'
+#' @param weights Portfolio weights data frame.
+#' @param actual_returns Portfolio returns data frame.
+#'
+#' @return Per-period turnover values and the total turnover across all periods.
+calculate_turnover <- function(weights, actual_returns) {
+  # Sort weights by date and stock_id
+  weights <- weights %>%
+    arrange(stock_id, date)
+
+  # Calculate adjusted weights based on returns
+  adjusted_weights <- weights %>%
+    left_join(actual_returns, by = c("stock_id", "date")) %>%
+    group_by(stock_id) %>%
+    mutate(weight_prev = lag(weight, default = 0),
+           adjusted_weight = weight_prev * (1 + actual_return)) %>%
+    ungroup()
+
+  # Calculate turnover as the sum of absolute changes in weights
+  turnover_per_period <- adjusted_weights %>%
+    group_by(date) %>%
+    summarise(turnover = sum(abs(weight - adjusted_weight), na.rm = TRUE), .groups = "drop")
+
+  # Calculate total turnover as the sum of turnover across all periods
+  total_turnover <- sum(turnover_per_period$turnover, na.rm = TRUE)
+
+  return(list(per_period_turnover = turnover_per_period$turnover, total_turnover = total_turnover))
+}

@@ -1061,46 +1061,549 @@ summary.portfolioReturns <- function(portfolio_object, type=NULL) {
   return(stats)
 }
 
-#' Plotting method for portfolioReturns S3 objects
+#' Summarize Portfolio Performance with Advanced Metrics and Statistical Tests
 #'
-#' @param portfolio_object A portfolioReturns S3 object
-#' @param type default=NULL (standrad evaluation), Alternative: tq_performance_functions
+#' Provides a detailed summary of portfolio performance metrics,
+#' including statistical tests for significance.
 #'
-#' @return A ggplot object
+#' @param portfolio_object A `portfolioReturns` object.
+#' @param benchmark_data (Optional) A data frame with columns `date` and `return` representing an external benchmark.
+#' @param test Logical. If `TRUE`, performs statistical tests for significance.
+#' @param print Logical. If `TRUE`, prints the summary to the console.
 #'
-#' @import ggplot2
-#' @import tidyquant
-#' @importFrom dplyr group_by mutate
-#' @importFrom tidyr pivot_longer
+#' @return A data frame summarizing portfolio performance metrics and test results.
+#'
+#' @import PerformanceAnalytics dplyr timetk
 #'
 #' @export
-#'
-plot.portfolioReturns <- function(portfolio_object, type = NULL) {
-  returns_data <- portfolio_object$portfolio_returns
-  weights_data <- portfolio_object$weights
-  actual_data <- portfolio_object$actual_returns
-  # long_format
-  returns_data_long <- returns_data %>%
-    tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns") |>
-    dplyr::arrange(date)
- if (is.null(type)) {
-  returns_data_long %>%
-    dplyr::group_by(portfolio) |>
-    dplyr::mutate(cum_returns = cumprod(1+returns)-1) |>
-    ggplot(aes(x = date, y = cum_returns, color = portfolio)) +
-    geom_line() +
-    theme_grey() +
-    labs(title = "Portfolio Wealth Index", x = "Date", y = "Returns") +
-    theme(legend.position = "bottom") +
-    theme_tq()
-  } else {
-    # User specifies a PerformanceAnalytics plotting function
-    xts_data <- timetk::tk_xts(returns_data)
-    # Call the user-specified PerformanceAnalytics function
-    plot_func <- match.fun(type)
-    plot_func(xts_data)
+summary.performance <- function(portfolio_object, benchmark_data = NULL, test = FALSE, print = FALSE) {
+
+  # Validate input
+  checkmate::assert_class(portfolio_object, classes = "portfolioReturns")
+  if (!is.null(benchmark_data)) {
+    checkmate::assert_data_frame(benchmark_data, any.missing = FALSE)
+    checkmate::assert_subset(c("date", "return"), choices = names(benchmark_data))
   }
+
+  # Extract portfolio returns (wide format)
+  portfolio_returns <- portfolio_object$portfolio_returns
+
+  # Handle benchmark: use external or equally weighted as default
+  if (!is.null(benchmark_data)) {
+    benchmark <- benchmark_data
+  } else {
+    # Compute equally weighted portfolio as benchmark
+    ew_returns <- portfolio_object$actual_returns %>%
+      group_by(date) %>%
+      summarise(benchmark = mean(actual_return, na.rm = TRUE), .groups = 'drop')
+    benchmark <- ew_returns
+  }
+
+  # Convert to xts format for PerformanceAnalytics
+  portfolio_xts <- portfolio_returns %>%
+    timetk::tk_xts()
+  benchmark_xts <- benchmark %>%
+    timetk::tk_xts(select = benchmark, date_var = date)
+
+  # Initialize results data frame
+  results <- tibble()
+
+  # Loop over each portfolio column
+  portfolio_names <- setdiff(names(portfolio_returns), "date")
+  for (portfolio in portfolio_names) {
+    # Extract portfolio and benchmark returns
+    portfolio_data <- portfolio_xts[, portfolio, drop = FALSE]
+
+    # Performance Metrics (Annualized where applicable)
+    mean_return <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[1, 1]
+    volatility <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[2, 1]
+    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[3, 1]
+    sortino_ratio <- PerformanceAnalytics::SortinoRatio(portfolio_data)
+    max_drawdown <- PerformanceAnalytics::maxDrawdown(portfolio_data)
+    skewness <- PerformanceAnalytics::skewness(portfolio_data)
+    kurtosis <- PerformanceAnalytics::kurtosis(portfolio_data,method="excess")
+    value_at_risk <- PerformanceAnalytics::VaR(portfolio_data, p = 0.05)
+    conditional_var <- PerformanceAnalytics::ES(portfolio_data, p = 0.05)
+
+    # Metrics relative to benchmark
+    if (!is.null(benchmark_xts)) {
+      alpha <- PerformanceAnalytics::CAPM.alpha(portfolio_data, benchmark_xts)
+      beta <- PerformanceAnalytics::CAPM.beta(portfolio_data, benchmark_xts)
+      tracking_error <- PerformanceAnalytics::TrackingError(portfolio_data, benchmark_xts)
+      information_ratio <- PerformanceAnalytics::InformationRatio(portfolio_data, benchmark_xts)
+    } else {
+      alpha <- beta <- tracking_error <- information_ratio <- r_squared <- NA
+    }
+
+    # Statistical Tests (if requested)
+    if (test) {
+      # Mean return t-test
+      mean_t_test_p <- t.test(as.numeric(portfolio_data), mu = 0)$p.value
+
+      # Alpha significance
+      alpha_t_test_p <- if (!is.null(benchmark_xts)) {
+        t.test(as.numeric(portfolio_data - benchmark_xts))$p.value
+      } else NA
+
+      # Beta significance
+      beta_t_test_p <- if (!is.null(benchmark_xts)) {
+        lm_result <- lm(as.numeric(portfolio_data) ~ as.numeric(benchmark_xts))
+        summary(lm_result)$coefficients[2, 4]
+      } else NA
+
+      # Information Ratio significance
+      information_ratio_t_test_p <- if (!is.null(benchmark_xts)) {
+        n <- nrow(portfolio_data)
+        info_ratio <- as.numeric(information_ratio)
+        t_stat <- sqrt(n) * info_ratio / sqrt(1 + info_ratio^2)
+        2 * (1 - pt(abs(t_stat), df = n - 1))
+      } else NA
+
+      # Sharpe ratio Memmel significance
+      sharpe_ratio_test_memmel_p <- MemmelSharpeTest(portfolio_data, benchmark_xts)
+    } else {
+      mean_t_test_p <- alpha_t_test_p <- beta_t_test_p <- information_ratio_t_test_p <- sharpe_ratio_test_memmel_p <- NA
+    }
+
+    # Combine results
+    results <- rbind(
+      results,
+      tibble(
+        Portfolio = portfolio_name,
+        `Annualized Mean` = round(mean_return, 4),
+        `Annualized Volatility` = round(volatility, 4),
+        `Sharpe Ratio` = round(sharpe_ratio, 4),
+        `Sortino Ratio` = round(sortino_ratio, 4),
+        `Max Drawdown` = round(max_drawdown, 4),
+        Skewness = round(skewness, 4),
+        Kurtosis = round(kurtosis, 4),
+        `Value at Risk` = round(value_at_risk, 4),
+        `Conditional Value at Risk` = round(conditional_var, 4),
+        Alpha = round(alpha, 4),
+        Beta = round(beta, 4),
+        `Tracking Error` = round(tracking_error, 4),
+        `Information Ratio` = round(information_ratio, 4),
+        `Mean T-Test P-Value` = round(mean_t_test_p, 4),
+        `Alpha T-Test P-Value` = round(alpha_t_test_p, 4),
+        `Beta T-Test P-Value` = round(beta_t_test_p, 4),
+        `Information Ratio T-Test P-Value` = round(information_ratio_t_test_p, 4),
+        `Sharpe Ratio Test (Memmel) P-Value` = round(sharpe_ratio_test_memmel_p$p, 4)
+      )
+    )
+  }
+
+  # Print table if `print` is TRUE
+  if (print) {
+    results_to_print <- results %>%
+      mutate(
+        `Annualized Mean` = ifelse(
+          !is.na(`Mean T-Test P-Value`),
+          paste0(round(`Annualized Mean`, 4),
+                 case_when(
+                   `Mean T-Test P-Value` <= 0.01 ~ "***",
+                   `Mean T-Test P-Value` <= 0.05 ~ "**",
+                   `Mean T-Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Annualized Mean`, 4)
+        ),
+        `Sharpe Ratio` = ifelse(
+          !is.na(`Sharpe Ratio Test (Memmel) P-Value`),
+          paste0(round(`Sharpe Ratio`, 4),
+                 case_when(
+                   `Sharpe Ratio Test (Memmel) P-Value` <= 0.01 ~ "***",
+                   `Sharpe Ratio Test (Memmel) P-Value` <= 0.05 ~ "**",
+                   `Sharpe Ratio Test (Memmel) P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Sharpe Ratio`, 4)
+        ),
+        `Information Ratio` = ifelse(
+          !is.na(`Information Ratio T-Test P-Value`),
+          paste0(round(`Information Ratio`, 4),
+                 case_when(
+                   `Information Ratio T-Test P-Value` <= 0.01 ~ "***",
+                   `Information Ratio T-Test P-Value` <= 0.05 ~ "**",
+                   `Information Ratio T-Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Information Ratio`, 4)
+        ),
+        `Alpha` = ifelse(
+          !is.na(`Alpha T-Test P-Value`),
+          paste0(round(`Alpha`, 4),
+                 case_when(
+                   `Alpha T-Test P-Value` <= 0.01 ~ "***",
+                   `Alpha T-Test P-Value` <= 0.05 ~ "**",
+                   `Alpha T-Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Alpha`, 4)
+        ),
+        `Beta` = ifelse(
+          !is.na(`Beta T-Test P-Value`),
+          paste0(round(`Beta`, 4),
+                 case_when(
+                   `Beta T-Test P-Value` <= 0.01 ~ "***",
+                   `Beta T-Test P-Value` <= 0.05 ~ "**",
+                   `Beta T-Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Beta`, 4)
+        )
+      ) %>%
+      select(-`Mean T-Test P-Value`, -`Alpha T-Test P-Value`, -`Beta T-Test P-Value`, -`Information Ratio T-Test P-Value`, -`Sharpe Ratio Test (Memmel) P-Value`)
+
+    print(knitr::kable(
+      results_to_print,
+      digits = 4,
+      align = "c",
+      format = "markdown",
+      caption = "Portfolio Performance Summary"
+    ))
+  }
+
+  return(results)
 }
+
+#' Summarize Advanced Portfolio Performance Metrics and Statistical Tests
+#'
+#' Provides a detailed summary of advanced portfolio performance metrics,
+#' including statistical tests and transaction cost adjustments.
+#'
+#' @param portfolio_object A `portfolioReturns` object.
+#' @param transaction_cost Numeric. Assumed transaction costs for turnover adjustment.
+#' @param gamma Numeric. Risk aversion parameter for Certainty Equivalent Return.
+#' @param test Logical. If `TRUE`, performs statistical tests for significance.
+#' @param print Logical. If `TRUE`, prints a formatted table of results.
+#'
+#' @return A data frame summarizing portfolio performance metrics and test results.
+#'
+#' @import PerformanceAnalytics tidyquant dplyr
+#'
+#' @export
+summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gamma = 3, test = FALSE, print = FALSE) {
+  # Extract returns and weights
+  portfolio_returns <- portfolio_object$portfolio_returns
+  actual_returns <- portfolio_object$actual_returns
+  weights <- portfolio_object$weights
+  benchmark_weights <- portfolio_object$benchmark_weights
+  benchmark_returns <- portfolio_object$benchmark_returns
+
+  # Check if benchmark exists, otherwise create equal-weighted benchmark
+  if (is.null(benchmark_weights) || is.null(benchmark_returns)) {
+    unique_dates <- unique(portfolio_returns$date)
+    benchmark_weights <- actual_returns %>%
+      group_by(date) %>%
+      mutate(benchmark_weight = 1 / n()) %>%
+      ungroup() |>  select(-actual_return)
+    benchmark_returns <- actual_returns %>%
+      left_join(benchmark_weights, by = c("date", "stock_id")) %>%
+      group_by(date) %>%
+      summarize(benchmark_return = sum(actual_return * benchmark_weight, na.rm = TRUE), .groups = "drop")
+  }
+
+  # Convert data to xts for PerformanceAnalytics compatibility
+  portfolio_xts <- timetk::tk_xts(portfolio_returns, silent = TRUE)
+  benchmark_xts <- timetk::tk_xts(benchmark_returns, silent = TRUE)
+  weights_xts <- timetk::tk_xts(weights, silent = TRUE)
+  benchmark_weights_xts <- timetk::tk_xts(benchmark_weights, silent = TRUE)
+
+  # Initialize results data frame
+  results <- tibble()
+
+  # Loop through each portfolio
+  for (portfolio_name in names(portfolio_xts)) {
+    # Extract portfolio and benchmark returns
+    portfolio_ret <- portfolio_xts[, portfolio_name]
+    benchmark_ret <- benchmark_xts[, 1] # Assumes single benchmark column
+    weights_ext <- weights_xts[, portfolio_name]
+    benchmark_weights_ext <- benchmark_weights_xts[, 1] # Assumes single benchmark column
+
+    # Annualized mean return
+    annualized_mean <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret)[1,1]
+    mean_pval <- if (test) {
+      t.test(coredata(portfolio_ret), mu = mean(coredata(benchmark_ret)), alternative = "greater")$p.value
+    } else {
+      NA
+    }
+
+    # Sharpe ratio and Memmel-corrected test
+    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret)[3,1]
+    memmel_test <- if (test) {
+      memmel_result <- MemmelSharpeTest(coredata(portfolio_ret), coredata(benchmark_ret), alternative = "greater")
+      list(statistic = memmel_result$f, p_value = memmel_result$p)
+    } else {
+      list(statistic = NA, p_value = NA)
+    }
+
+    # Active share
+    active_share <- calculate_active_share(weights |> select(stock_id, date, weight=!!portfolio_name), benchmark_weights)
+
+    # Turnover
+    turnover_data <- calculate_turnover(weights |> select(stock_id, date, weight=!!portfolio_name), actual_returns)
+    per_period_turnover <- turnover_data$per_period_turnover
+    total_turnover <- turnover_data$total_turnover
+
+    # Transaction cost-adjusted returns
+    tc_adjusted_returns <- portfolio_ret - (per_period_turnover * transaction_cost)
+    tc_sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(tc_adjusted_returns)[3,1]
+    tc_memmel_test <- if (test) {
+      memmel_result <- MemmelSharpeTest(coredata(tc_adjusted_returns), coredata(benchmark_ret), alternative = "greater")
+      list(statistic = memmel_result$f, p_value = memmel_result$p)
+    } else {
+      list(statistic = NA, p_value = NA)
+    }
+
+    # Information ratio
+    tracking_error <- sd(portfolio_ret - benchmark_ret, na.rm = TRUE) * sqrt(12)
+    information_ratio <- mean(portfolio_ret - benchmark_ret, na.rm = TRUE) / tracking_error
+    ir_pval <- if (test) {
+      t.test(coredata(portfolio_ret - benchmark_ret), alternative = "greater")$p.value
+    } else {
+      NA
+    }
+
+    # Certainty equivalent return
+    cert_eq_return <- annualized_mean - (gamma / 2) * (sd(portfolio_ret, na.rm = TRUE) * sqrt(12))^2
+
+    # Collect results for this portfolio
+    # Combine results
+    # Collect results for this portfolio
+    results <- rbind(
+      results,
+      tibble(
+        Portfolio = portfolio_name,
+        `Annualized Mean` = round(annualized_mean, 4),
+        `Mean P-Value` = round(mean_pval, 4),
+        `Sharpe Ratio` = round(sharpe_ratio, 4),
+        `Sharpe Test Stat.` = round(memmel_test$statistic, 4),
+        `Sharpe Test P-Value` = round(memmel_test$p_value, 4),
+        `Active Share` = round(active_share, 4),
+        `Turnover` = round(total_turnover, 4),
+        `TC Adjusted Sharpe` = round(tc_sharpe_ratio, 4),
+        `TC Sharpe Test Stat.` = round(tc_memmel_test$statistic, 4),
+        `TC Sharpe Test P-Value` = round(tc_memmel_test$p_value, 4),
+        `Information Ratio` = round(information_ratio, 4),
+        `IR P-Value` = round(ir_pval, 4),
+        CER = round(cert_eq_return, 4)
+      )
+    )
+  }
+
+  # Add significance stars
+  if (print) {
+    results_to_print <- results %>%
+      mutate(
+        `Annualized Mean` = ifelse(
+          !is.na(`Mean P-Value`),
+          paste0(round(`Annualized Mean`, 4),
+                 case_when(
+                   `Mean P-Value` <= 0.01 ~ "***",
+                   `Mean P-Value` <= 0.05 ~ "**",
+                   `Mean P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Annualized Mean`, 4)
+        ),
+        `Sharpe Ratio` = ifelse(
+          !is.na(`Sharpe Test P-Value`),
+          paste0(round(`Sharpe Ratio`, 4),
+                 case_when(
+                   `Sharpe Test P-Value` <= 0.01 ~ "***",
+                   `Sharpe Test P-Value` <= 0.05 ~ "**",
+                   `Sharpe Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Sharpe Ratio`, 4)
+        ),
+        `TC Adjusted Sharpe` = ifelse(
+          !is.na(`TC Sharpe Test P-Value`),
+          paste0(round(`TC Adjusted Sharpe`, 4),
+                 case_when(
+                   `TC Sharpe Test P-Value` <= 0.01 ~ "***",
+                   `TC Sharpe Test P-Value` <= 0.05 ~ "**",
+                   `TC Sharpe Test P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`TC Adjusted Sharpe`, 4)
+        ),
+        `Information Ratio` = ifelse(
+          !is.na(`IR P-Value`),
+          paste0(round(`Information Ratio`, 4),
+                 case_when(
+                   `IR P-Value` <= 0.01 ~ "***",
+                   `IR P-Value` <= 0.05 ~ "**",
+                   `IR P-Value` <= 0.10 ~ "*",
+                   TRUE ~ ""
+                 )),
+          round(`Information Ratio`, 4)
+        )
+      ) %>%
+      rename(!!paste0("CER (gamma=",gamma,")") := CER) |>
+      select(-`Mean P-Value`, -`Sharpe Test P-Value`, -`TC Sharpe Test P-Value`, -`IR P-Value`, -`Sharpe Test Stat.`, -`TC Sharpe Test Stat.`)
+
+    print(knitr::kable(
+      results_to_print,
+      digits = 4,
+      align = "c",
+      format = "markdown",
+      caption = "Portfolio Performance Summary"
+    ))
+  }
+
+  return(results)
+}
+
+#' Summarize Portfolio Correlations
+#'
+#' Computes and optionally prints a correlation table between portfolio returns,
+#' with the benchmark being the first column.
+#'
+#' @param portfolio_object A `portfolioReturns` object.
+#' @param benchmark_data (Optional) A data frame with columns `date` and `return` representing an external benchmark.
+#' @param print Logical. If `TRUE`, prints the correlation table using `kable`.
+#' @return A correlation matrix between portfolio returns and the benchmark.
+#'
+#' @import knitr dplyr tidyr
+#' @export
+summary.correlation <- function(portfolio_object, benchmark_data = NULL, print = FALSE) {
+  # Validate input
+  checkmate::assert_class(portfolio_object, classes = "portfolioReturns")
+  if (!is.null(benchmark_data)) {
+    checkmate::assert_data_frame(benchmark_data, any.missing = FALSE)
+    checkmate::assert_subset(c("date", "return"), choices = names(benchmark_data))
+  }
+
+  # Extract portfolio returns (wide format)
+  portfolio_returns <- portfolio_object$portfolio_returns
+
+  # Handle benchmark: use external or equally weighted as default
+  if (!is.null(benchmark_data)) {
+    benchmark <- benchmark_data %>%
+      rename(benchmark = return)
+  } else {
+    # Compute equally weighted portfolio as benchmark
+    benchmark <- portfolio_object$actual_returns %>%
+      group_by(date) %>%
+      summarise(benchmark = mean(actual_return, na.rm = TRUE), .groups = 'drop')
+  }
+
+  # Merge benchmark with portfolio returns
+  combined_data <- portfolio_returns %>%
+    left_join(benchmark, by = "date") %>%
+    select(-date)
+
+  # Compute the correlation matrix
+  correlation_matrix <- cor(combined_data, use = "pairwise.complete.obs")
+
+  # Optionally print the correlation table
+  if (print) {
+    # Format the matrix for display
+    formatted_matrix <- as.data.frame(correlation_matrix)
+    colnames(formatted_matrix) <- colnames(combined_data)
+    rownames(formatted_matrix) <- colnames(combined_data)
+
+    # Convert to a neat table using kable
+    print(knitr::kable(
+      formatted_matrix,
+      format = "markdown",
+      digits = 4,
+      align = "c",
+      caption = "Correlation Matrix of Portfolio Returns"
+    ))
+  }
+
+  return(correlation_matrix)
+}
+
+#' Summarize Portfolio Weights with Advanced Options
+#'
+#' Computes summary statistics for portfolio weights, including deviations, turnover, L1/L2 norms, and weight stability.
+#'
+#' @param portfolio_object A `portfolioReturns` object.
+#' @param use_delta Logical. If `TRUE` and the portfolio object has a benchmark, computes statistics for delta_weights. Defaults to `FALSE`.
+#' @param print Logical. If `TRUE`, prints the summary in a nicely formatted table. Defaults to `FALSE`.
+#'
+#' @return A tibble with advanced portfolio weight statistics.
+#'
+#' @export
+summary.weights <- function(portfolio_object, use_delta = FALSE, print = FALSE) {
+  # Validate the portfolio object
+  checkmate::assert_class(portfolio_object, classes = "portfolioReturns")
+
+  # Determine weights to use
+  if (use_delta && !is.null(portfolio_object$delta_weights)) {
+    weights <- portfolio_object$delta_weights
+  } else {
+    weights <- portfolio_object$weights
+  }
+
+  # Check that weights are present
+  if (is.null(weights) || ncol(weights) <= 2) {
+    stop("No portfolio weights available for summary.")
+  }
+
+  # Extract the list of portfolios
+  portfolio_names <- setdiff(names(weights), c("date", "stock_id"))
+
+  # Compute weight statistics
+  weight_summary <- weights %>%
+    tidyr::pivot_longer(cols = -c(stock_id, date), names_to = "Portfolio", values_to = "Weight") %>%
+    group_by(Portfolio, date) %>%
+    mutate(
+      `Date Std. Dev.` = sd(Weight, na.rm = TRUE)
+    ) %>%
+    group_by(Portfolio) %>%
+    summarise(
+      `Min Weights` = round(min(Weight, na.rm = TRUE), 4),
+      `Max Weights` = round(max(Weight, na.rm = TRUE), 4),
+      `Mean Weights` = round(mean(Weight, na.rm = TRUE), 4),
+      `Std. Dev. Weights` = round(sd(Weight, na.rm = TRUE), 4),
+      `Mean Std. Dev.` = round(mean(`Date Std. Dev.`, na.rm = TRUE), 4),
+      `Std. Std. Dev.` = round(sd(`Date Std. Dev.`, na.rm = TRUE), 4),
+      `Total Short Weights` = round(sum(Weight[Weight < 0], na.rm = TRUE), 4),
+      `HHI` = round(mean(sum(Weight^2, na.rm = TRUE)), 4), # Herfindahl-Hirschman Index
+      `Diversity` = round(mean(1 / sum(Weight^2, na.rm = TRUE)), 4), # Diversity measure (inverse HHI)
+      `L1 Norm` = round(mean(sum(abs(Weight), na.rm = TRUE)), 4), # L1 norm
+      `L2 Norm` = round(mean(sqrt(sum(Weight^2, na.rm = TRUE))), 4), # L2 norm
+      .groups = "drop"
+    )
+
+  # Compute turnover using calculate_turnover() and map for each portfolio
+  turnover_summary <- portfolio_names %>%
+    purrr::map_dfr(
+      ~ {
+        portfolio_weights <- weights %>%
+          select(stock_id, date, weight = !!sym(.x))
+        turnover <- calculate_turnover(portfolio_weights, portfolio_object$actual_returns)
+
+        tibble(
+          Portfolio = .x,
+          `Average Turnover` = round(mean(turnover$per_period_turnover, na.rm = TRUE), 4),
+          `Total Turnover` = round(sum(turnover$per_period_turnover, na.rm = TRUE), 4)
+        )
+      }
+    )
+
+  # Combine results
+  results <- weight_summary %>%
+    left_join(turnover_summary, by = "Portfolio")
+
+  # Print the results in a nicely formatted table if `print` is TRUE
+  if (print) {
+    print(knitr::kable(
+      results,
+      digits = 4,
+      align = "c",
+      format = "markdown",
+      caption = "Portfolio Weights Summary with Advanced Metrics"
+    ))
+  }
+
+  return(results)
+}
+
 
 #' Combine portfolioReturns Objects
 #'
@@ -1163,3 +1666,44 @@ combine_portfolioReturns <- function(portfolio_list) {
 }
 
 
+
+#' Plotting method for portfolioReturns S3 objects
+#'
+#' @param portfolio_object A portfolioReturns S3 object
+#' @param type default=NULL (standrad evaluation), Alternative: tq_performance_functions
+#'
+#' @return A ggplot object
+#'
+#' @import ggplot2
+#' @import tidyquant
+#' @importFrom dplyr group_by mutate
+#' @importFrom tidyr pivot_longer
+#'
+#' @export
+#'
+plot.portfolioReturns <- function(portfolio_object, type = NULL) {
+  returns_data <- portfolio_object$portfolio_returns
+  weights_data <- portfolio_object$weights
+  actual_data <- portfolio_object$actual_returns
+  # long_format
+  returns_data_long <- returns_data %>%
+    tidyr::pivot_longer(cols = -date, names_to = "portfolio", values_to = "returns") |>
+    dplyr::arrange(date)
+  if (is.null(type)) {
+    returns_data_long %>%
+      dplyr::group_by(portfolio) |>
+      dplyr::mutate(cum_returns = cumprod(1+returns)-1) |>
+      ggplot(aes(x = date, y = cum_returns, color = portfolio)) +
+      geom_line() +
+      theme_grey() +
+      labs(title = "Portfolio Wealth Index", x = "Date", y = "Returns") +
+      theme(legend.position = "bottom") +
+      theme_tq()
+  } else {
+    # User specifies a PerformanceAnalytics plotting function
+    xts_data <- timetk::tk_xts(returns_data)
+    # Call the user-specified PerformanceAnalytics function
+    plot_func <- match.fun(type)
+    plot_func(xts_data)
+  }
+}
