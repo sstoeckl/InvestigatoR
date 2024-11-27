@@ -352,9 +352,11 @@ create_portfolioReturns <- function(data, return_label, benchmark_label = NULL) 
     # Extract benchmark_returns
     delta_weights <- data %>% dplyr::select(stock_id, date) %>%  arrange(stock_id, date)
     benchmark_weights <- data %>% dplyr::select(stock_id, date, benchmark_weight = !!rlang::sym(benchmark_label)) %>%  arrange(stock_id, date)
-    benchmark_returns <- data %>% dplyr::select(stock_id, date, actual_return = !!rlang::sym(return_label), benchmark_weight = !!rlang::sym(benchmark_label)) %>%
+    benchmark_returns <- data %>%
+      dplyr::select(stock_id, date, actual_return = !!rlang::sym(return_label), benchmark_weight = !!rlang::sym(benchmark_label)) %>%
       dplyr::mutate(benchmark_return = actual_return * benchmark_weight) %>%
-      select(-actual_return, -benchmark_weight) %>%
+      group_by(date) |>
+      summarise(benchmark_return = sum(benchmark_return), .groups = "drop") %>%
       arrange(date)
 
   } else {
@@ -651,13 +653,13 @@ postprocessing_portfolios <- function(portfolio_object, config) {
           mutate(current_sum = sum(weight, na.rm = TRUE)) %>%
           mutate(
             # Scale up to meet min_sum
-            weight = if (!is.null(min_sum) && current_sum < min_sum) {
+            weight = if (!is.null(min_sum) && min(current_sum) < min_sum) {
               weight * (min_sum / current_sum)
             } else {
               weight
             },
             # Scale down to meet max_sum
-            weight = if (!is.null(max_sum) && current_sum > max_sum) {
+            weight = if (!is.null(max_sum) && max(current_sum) > max_sum) {
               weight * (max_sum / current_sum)
             } else {
               weight
@@ -707,30 +709,44 @@ postprocessing_portfolios <- function(portfolio_object, config) {
         select(-total)
     } else {
       # For sum_val = 0, balance positive and negative weights
+      # check whether both min_sum and max_sum are defined and != NULL and wehterh min_sum=-max_sum, if not, throw an error using cli
+      if (is.null(min_sum) | is.null(max_sum)){
+        cli::cli_alert_error("For sum_val = 0, min_sum and max_sum must be defined")
+      }
+      # check whether min_sum=-max_sum
+      if (min_sum != -max_sum){
+        cli::cli_alert_error("For sum_val = 0, min_sum must be equal to -max_sum")
+      }
       # Separate positive and negative weights
       weights_df <- weights_df %>%
         group_by(model_id, date) %>%
+        mutate(weight=weight-mean(weight)) |>
         mutate(
+          # Calculate the initial positive and negative sums
+          pos_sum = sum(weight[weight > 0], na.rm = TRUE),
+          neg_sum = sum(weight[weight < 0], na.rm = TRUE),
+
+          # Replace zero sums with epsilon to avoid division by zero
+          pos_sum = ifelse(pos_sum == 0, epsilon, pos_sum),
+          neg_sum = ifelse(neg_sum == 0, -epsilon, neg_sum),
+
+          # Adjust negative sum to match the desired scaling constraints
+          neg_sum_scaled = -(min(abs(min_sum),abs(max_sum))),
+          pos_sum_scaled = -neg_sum_scaled,
+
+          # Scale positive and negative weights independently
+          weight = ifelse(
+            weight > 0,
+            weight / pos_sum * pos_sum_scaled,
+            weight / abs(neg_sum) * abs(neg_sum_scaled)
+          ),
+          # Calculate the initial positive and negative sums
           pos_sum = sum(weight[weight > 0], na.rm = TRUE),
           neg_sum = sum(weight[weight < 0], na.rm = TRUE)
         ) %>%
-        mutate(
-          weight = ifelse(weight > 0, ifelse(pos_sum==0, epsilon, weight), ifelse(neg_sum==0, -epsilon, weight)),
-          pos_sum = sum(weight[weight > 0], na.rm = TRUE),
-          neg_sum = sum(weight[weight < 0], na.rm = TRUE),
-          pos_sum = ifelse(pos_sum<min_sum, min_sum, ifelse(pos_sum>max_sum, max_sum, pos_sum)),
-          neg_sum = ifelse(neg_sum>-min_sum, -min_sum, ifelse(neg_sum< -max_sum, -max_sum, neg_sum)),
-          neg_sum = ifelse(abs(neg_sum)!=pos_sum, -min(abs(neg_sum),pos_sum), neg_sum),
-          pos_sum = ifelse(pos_sum!=abs(neg_sum), min(pos_sum,abs(neg_sum)), pos_sum)
-        ) %>%
-        mutate(
-          # Scale positive weights to match absolute neg_sum
-          pos_sum2 = sum(weight[weight > 0], na.rm = TRUE),
-          neg_sum2 = sum(weight[weight < 0], na.rm = TRUE),
-          weight = ifelse(weight > 0, weight / pos_sum2 * pos_sum, weight / abs(neg_sum2) * abs(neg_sum)),
-        ) %>%
         ungroup() %>%
-        select(-pos_sum, -neg_sum, -pos_sum2, -neg_sum2)
+        select(-pos_sum, -neg_sum, -neg_sum_scaled, -pos_sum_scaled)
+
     }
 
     # Final clamp to ensure weights are within min and max after scaling
@@ -1090,7 +1106,12 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
 
   # Handle benchmark: use external or equally weighted as default
   if (!is.null(benchmark_data)) {
+    # if no benchmark is given, check wether portfolio object comes with own benchmark
+    if (portfolio_object$benchmark_returns %>% nrow() > 0){
+      benchmark <- portfolio_object$benchmark_returns
+    } else {
     benchmark <- benchmark_data
+    }
   } else {
     # Compute equally weighted portfolio as benchmark
     ew_returns <- portfolio_object$actual_returns %>%
@@ -1098,6 +1119,10 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
       summarise(benchmark = mean(actual_return, na.rm = TRUE), .groups = 'drop')
     benchmark <- ew_returns
   }
+
+  # add benchmark to portfolio_returns
+  portfolio_returns <- portfolio_returns %>%
+    left_join(benchmark, by = "date")
 
   # Convert to xts format for PerformanceAnalytics
   portfolio_xts <- portfolio_returns %>%
@@ -1115,9 +1140,9 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
     portfolio_data <- portfolio_xts[, portfolio, drop = FALSE]
 
     # Performance Metrics (Annualized where applicable)
-    mean_return <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[1, 1]
-    volatility <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[2, 1]
-    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data)[3, 1]
+    mean_return <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data,geometric=FALSE)[1, 1]
+    volatility <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data,geometric=FALSE)[2, 1]
+    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_data,geometric=FALSE)[3, 1]
     sortino_ratio <- PerformanceAnalytics::SortinoRatio(portfolio_data)
     max_drawdown <- PerformanceAnalytics::maxDrawdown(portfolio_data)
     skewness <- PerformanceAnalytics::skewness(portfolio_data)
@@ -1169,7 +1194,7 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
     results <- rbind(
       results,
       tibble(
-        Portfolio = portfolio_name,
+        Portfolio = portfolio,
         `Annualized Mean` = round(mean_return, 4),
         `Annualized Volatility` = round(volatility, 4),
         `Sharpe Ratio` = round(sharpe_ratio, 4),
@@ -1303,6 +1328,13 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
       summarize(benchmark_return = sum(actual_return * benchmark_weight, na.rm = TRUE), .groups = "drop")
   }
 
+  # add benchmark returns to portfolio returns
+  portfolio_returns <- portfolio_returns %>%
+    left_join(benchmark_returns|> rename(benchmark=benchmark_return), by = "date")
+  # and to weights
+  weights <- weights %>%
+    left_join(benchmark_weights |> rename(benchmark=benchmark_weight), by = c("stock_id","date"))
+
   # Convert data to xts for PerformanceAnalytics compatibility
   portfolio_xts <- timetk::tk_xts(portfolio_returns, silent = TRUE)
   benchmark_xts <- timetk::tk_xts(benchmark_returns, silent = TRUE)
@@ -1321,7 +1353,7 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
     benchmark_weights_ext <- benchmark_weights_xts[, 1] # Assumes single benchmark column
 
     # Annualized mean return
-    annualized_mean <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret)[1,1]
+    annualized_mean <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret,geometric=FALSE)[1,1]
     mean_pval <- if (test) {
       t.test(coredata(portfolio_ret), mu = mean(coredata(benchmark_ret)), alternative = "greater")$p.value
     } else {
@@ -1329,7 +1361,7 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
     }
 
     # Sharpe ratio and Memmel-corrected test
-    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret)[3,1]
+    sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(portfolio_ret,geometric=FALSE)[3,1]
     memmel_test <- if (test) {
       memmel_result <- MemmelSharpeTest(coredata(portfolio_ret), coredata(benchmark_ret), alternative = "greater")
       list(statistic = memmel_result$f, p_value = memmel_result$p)
@@ -1347,7 +1379,7 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
 
     # Transaction cost-adjusted returns
     tc_adjusted_returns <- portfolio_ret - (per_period_turnover * transaction_cost)
-    tc_sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(tc_adjusted_returns)[3,1]
+    tc_sharpe_ratio <- PerformanceAnalytics::table.AnnualizedReturns(tc_adjusted_returns,geometric=FALSE)[3,1]
     tc_memmel_test <- if (test) {
       memmel_result <- MemmelSharpeTest(coredata(tc_adjusted_returns), coredata(benchmark_ret), alternative = "greater")
       list(statistic = memmel_result$f, p_value = memmel_result$p)
@@ -1552,21 +1584,42 @@ summary.weights <- function(portfolio_object, use_delta = FALSE, print = FALSE) 
     tidyr::pivot_longer(cols = -c(stock_id, date), names_to = "Portfolio", values_to = "Weight") %>%
     group_by(Portfolio, date) %>%
     mutate(
-      `Date Std. Dev.` = sd(Weight, na.rm = TRUE)
+      `Date Std. Dev.` = sd(Weight, na.rm = TRUE),
+      `HHI per Date` = sum(Weight^2, na.rm = TRUE), # Calculate HHI per date
+      `Diversity per Date` = 1 / sum(Weight^2, na.rm = TRUE), # Diversity measure per date
+      `L1 Norm per Date` = sum(abs(Weight), na.rm = TRUE), # L1 norm per date
+      `L2 Norm per Date` = sqrt(sum(Weight^2, na.rm = TRUE)), # L2 norm per date
+      `Short Weights per Date` = sum(Weight < 0, na.rm = TRUE), # Short weights per date
+      .groups = "drop"
     ) %>%
     group_by(Portfolio) %>%
     summarise(
-      `Min Weights` = round(min(Weight, na.rm = TRUE), 4),
-      `Max Weights` = round(max(Weight, na.rm = TRUE), 4),
-      `Mean Weights` = round(mean(Weight, na.rm = TRUE), 4),
-      `Std. Dev. Weights` = round(sd(Weight, na.rm = TRUE), 4),
-      `Mean Std. Dev.` = round(mean(`Date Std. Dev.`, na.rm = TRUE), 4),
-      `Std. Std. Dev.` = round(sd(`Date Std. Dev.`, na.rm = TRUE), 4),
-      `Total Short Weights` = round(sum(Weight[Weight < 0], na.rm = TRUE), 4),
-      `HHI` = round(mean(sum(Weight^2, na.rm = TRUE)), 4), # Herfindahl-Hirschman Index
-      `Diversity` = round(mean(1 / sum(Weight^2, na.rm = TRUE)), 4), # Diversity measure (inverse HHI)
-      `L1 Norm` = round(mean(sum(abs(Weight), na.rm = TRUE)), 4), # L1 norm
-      `L2 Norm` = round(mean(sqrt(sum(Weight^2, na.rm = TRUE))), 4), # L2 norm
+      `Weights (Min/Max)` = paste0(round(min(Weight, na.rm = TRUE), 4), "/", round(max(Weight, na.rm = TRUE), 4)),
+      `Weights M(SD)` = paste0(
+        round(mean(Weight, na.rm = TRUE), 4),
+        " (", round(sd(Weight, na.rm = TRUE), 4), ")"
+      ), # Mean with SD in brackets
+      `Std.Dev./Date M(SD)` = paste0(
+        round(mean(`Date Std. Dev.`, na.rm = TRUE), 4),
+        " (", round(sd(`Date Std. Dev.`, na.rm = TRUE), 4), ")"
+      ),
+      `HHI M(SD)` = paste0(
+        round(mean(`HHI per Date`, na.rm = TRUE), 4),
+        " (", round(sd(`HHI per Date`, na.rm = TRUE), 4), ")"
+      ), # HHI with SD in brackets
+      `Diversity` = round(mean(`Diversity per Date`, na.rm = TRUE), 4), # Diversity with SD in brackets
+      `L1 Norm M(SD)` = paste0(
+        round(mean(`L1 Norm per Date`, na.rm = TRUE), 4),
+        " (", round(sd(`L1 Norm per Date`, na.rm = TRUE), 4), ")"
+      ), # L1 Norm with SD in brackets
+      `L2 Norm M(SD)` = paste0(
+        round(mean(`L2 Norm per Date`, na.rm = TRUE), 4),
+        " (", round(sd(`L2 Norm per Date`, na.rm = TRUE), 4), ")"
+      ), # L2 Norm with SD in brackets
+      `Avg. Short Weights M(SD)` = paste0(
+        round(mean(`Short Weights per Date`, na.rm = TRUE), 4),
+        " (", round(sd(`Short Weights per Date`, na.rm = TRUE), 4), ")"
+      ), # Short weights with SD in brackets
       .groups = "drop"
     )
 
