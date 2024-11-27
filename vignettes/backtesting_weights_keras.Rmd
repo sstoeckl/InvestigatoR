@@ -56,7 +56,7 @@ library(tibble)
 library(PerformanceAnalytics)
 
 # Set up the Python virtual environment
-reticulate::use_virtualenv("C:/R/python/")
+reticulate::use_virtualenv("../../python/")
 
 # Confirm TensorFlow and Keras availability
 reticulate::py_config()  
@@ -189,15 +189,15 @@ We start with a simple Keras model with:
 # Define a simple Keras model configuration
 config_keras_simple <- list(
   layers = list(
-    list(type = "dense", units = 6, activation = "elu"),
-    list(type = "dense", units = 3, activation = "linear"),
+    list(type = "dense", units =32, activation = "elu"),
+    list(type = "dense", units = 16, activation = "elu"),
     list(type = "dense", units = 1, activation = "sigmoid")  # Simple sigmoid activation bounded between 0 and 1
   ),
   loss = list(
     name = "sharpe_ratio_loss"  # Standard Sharpe Ratio loss with no penalties
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
+  epochs = 50,
   verbose = 0,
   seeds = c(42)  # Set random seed for reproducibility
 )
@@ -221,13 +221,13 @@ pf_config_unconstrained <- list(
   )
 )
 return_label <- "R1M_Usd"
-features <- c("Div_Yld", "Eps", "Mkt_Cap_12M_Usd", "Mom_11M_Usd", "Ocf", "Pb", "Vol1Y_Usd")
+features <- colnames(data_ml_red)[4:95]
 rolling <- TRUE
 window_size <- "5 years"
 step_size <- "1 year"
 offset <- "1 month"
 in_sample <- TRUE
-num_cores <- 4
+num_cores <- 12
 verbose <- TRUE
 ```
 
@@ -348,13 +348,13 @@ The **`activation_box_sigmoid`** ensures:
 # Configuration with long-only activation
 config_box_sigmoid <- list(
   layers = list(
-    list(type = "dense", units = 6, activation = "relu"),
-    list(type = "dense", units = 3, activation = "relu"),
+    list(type = "dense", units = 32, activation = "elu"),
+    list(type = "dense", units = 16, activation = "elu"),
     list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
   ),
   loss = list(name = "sharpe_ratio_loss"),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
+  epochs = 50,
   verbose = 0,
   seeds = c(42)
 )
@@ -395,8 +395,8 @@ The **`activation_box_tanh`** ensures:
 # Configuration with sum constraints
 config_box_tanh <- list(
   layers = list(
-    list(type = "dense", units = 6, activation = "relu"),
-    list(type = "dense", units = 3, activation = "relu"),
+    list(type = "dense", units = 32, activation = "elu"),
+    list(type = "dense", units = 16, activation = "elu"),
     list(type = "dense", units = 1, activation = activation_box_tanh(min_weight = 0, max_weight = 0.2))
   ),
   loss = list(name = "sharpe_ratio_loss"),
@@ -761,8 +761,8 @@ Optimize portfolio weights to maximize the Sharpe Ratio difference from the benc
 # here with different activation function, because we also need negative weights
 config_unconstrained_benchmark <- list(
   layers = list(
-    list(type = "dense", units = 6, activation = "linear"),
-    list(type = "dense", units = 3, activation = "tanh"),
+    list(type = "dense", units = 32, activation = "linear"),
+    list(type = "dense", units = 16, activation = "tanh"),
     list(type = "dense", units = 1, activation = "tanh")  # No custom activation
   ),
   loss = list(
