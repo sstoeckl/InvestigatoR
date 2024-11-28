@@ -5,10 +5,12 @@ date: "`r Sys.Date()`"
 output:
   rmarkdown::html_vignette:
     toc: true
+  rmarkdown::pdf_document:
+    toc: true
 vignette: >
   %\VignetteIndexEntry{Backtesting Portfolio Weight Optimization}
-  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
 ---
 
 ```{r setup, include=FALSE}
@@ -25,7 +27,7 @@ knitr::opts_chunk$set(
 
 Modern portfolio optimization requires balancing risk-adjusted returns with real-world constraints, such as transaction costs, leverage limits, and benchmark adherence. Traditional optimization techniques often struggle to incorporate these constraints effectively, leaving room for innovative approaches.
 
-The **InvestigatoR** package leverages machine learning, particularly Keras-based models, to address these challenges. By offering flexible customization of loss functions, penalties, and activations, it enables users to design portfolios that maximize performance while adhering to practical constraints.
+This part of the **InvestigatoR** package leverages machine learning, particularly Keras-based models, to address these challenges. By offering flexible customization of loss functions, penalties, and activations, it enables users to design portfolios that maximize performance while adhering to practical constraints.
 
 This vignette serves to:
 
@@ -33,18 +35,243 @@ This vignette serves to:
 2. Demonstrate its functionality through backtesting.
 3. Validate its methods empirically, showcasing improvements in portfolio performance metrics like the Sharpe Ratio and Information Ratio.
 
+## Leveraging Neural Networks for Portfolio Weight Prediction
+
+Portfolio weight prediction in the **InvestigatoR** package is achieved using the `keras_weights` function, which leverages the power of TensorFlow and Keras to train neural networks. This approach provides:
+
+- **Flexibility**: Easy customization of loss functions, activation functions, and metrics.
+- **Scalability**: Ability to handle large datasets and numerous features efficiently.
+- **Extensibility**: Support for diverse portfolio optimization objectives through modular loss functions.
+
 ---
+
+### Loss Functions for `keras_weights`
+
+The `keras_weights` function leverages the flexibility of **Keras** and **TensorFlow** to enable weight prediction for portfolio optimization tasks. It supports highly customizable configurations through user-defined layers, activation functions, loss functions, optimizers, and metrics. The modularity of this setup allows users to experiment with various optimization objectives, including Sharpe ratio, Information ratio, and active returns, while incorporating constraints like L1/L2 regularization, leverage, and diversification penalties.
+
+### Available Loss Functions and Parameters
+
+1. **`sharpe_ratio_loss`**
+
+   - **Objective**: Maximizes the Sharpe Ratio of portfolio returns.
+   - **Parameters**:
+   
+     - `transaction_costs`: Penalizes frequent rebalancing to reduce costs.
+     - `delta`: Tolerance level for achieving the optimal Sharpe Ratio.
+     - `lambda`: Diversification penalty, encouraging broader allocation.
+     - `leverage`: Constraint on total portfolio exposure.
+     - `eta`: Leverage penalty, discouraging extreme allocations.
+
+2. **`sharpe_ratio_difference_loss`**
+
+   - **Objective**: Maximizes the Sharpe Ratio of active returns (portfolio return minus benchmark return).
+   - **Parameters**:
+   
+     - Same as `sharpe_ratio_loss`, with additional `benchmark_label` for specifying the benchmark.
+
+3. **`information_ratio_loss_active_returns`**
+
+   - **Objective**: Maximizes the Information Ratio, balancing active returns and tracking error.
+   - **Parameters**:
+   
+     - `lambda_l1`: Encourages sparsity in active weight changes.
+     - `lambda_l2`: Promotes smooth weight deviations.
+     
+4. **`information_ratio_loss_regression_based`**
+
+   - **Objective**: Maximizes the Information Ratio, based on regression alpha and idiosyncratic volatility.
+   - **Parameters**:
+   
+     - `lambda_l1`: Encourages sparsity in active weight changes.
+     - `lambda_l2`: Promotes smooth weight deviations.
+
+5. **Custom Loss Functions**
+   - Users can define their loss functions by specifying objectives and penalties, integrating seamlessly with `keras_weights`.
+
+---
+
+### Metrics and Activation Functions for `keras_weights`
+
+Metrics provide additional performance measures during training, complementing the loss functions. Examples include:
+
+- Portfolio return metrics (e.g., cumulative return, annualized return).
+- Risk-adjusted performance metrics (e.g., Sharpe Ratio, Information Ratio).
+- Constraints validation metrics (e.g., turnover, leverage).
+
+Metrics can be customized to align with specific portfolio objectives, offering valuable insights during model training.
+
+Activation functions in `keras_weights` control the characteristics of portfolio weights, ensuring adherence to practical constraints.
+
+#### Available Activation Functions
+
+1. **`activation_box_sigmoid`**
+   - **Objective**: Constrain weights to a specific range (e.g., [0, 0.2]).
+   - **Parameters**:
+     - `min_weight`: Lower bound for weights.
+     - `max_weight`: Upper bound for weights.
+
+2. **`activation_box_tanh`**
+   - **Objective**: Constrain weights within a symmetric range (e.g., [-0.1, 0.1]).
+   - **Parameters**:
+     - `min_weight`: Lower bound for weights.
+     - `max_weight`: Upper bound for weights.
+
+These activation functions allow the user to impose realistic constraints on portfolio allocations, ensuring practical applicability. Also, self-provided activation functions can be used.
+
+### Objectives
+
+The following sections demonstrate:
+1. **Direct Portfolio Optimization**: Training neural networks to directly optimize weights without a benchmark.
+2. **Benchmark-Relative Optimization**: Enhancing portfolio performance relative to a benchmark, leveraging advanced loss functions and constraints.
+
+### Backtesting Framework Overview
+
+The **backtesting_weights** function provides a robust and flexible framework for predicting portfolio weights using various models and evaluating their performance. Here's a detailed explanation of its components, parameters, and best practices for configuration.
+
+#### **Key Components of the Framework**
+
+1. **Data Input**:
+
+   - **Format**: The data must be in a long format with columns for `stock_id`, `date`, feature variables, actual returns, benchmark weights (if any), and an optional mask.
+   - **Features**: The user specifies which feature columns will be used by the model for weight predictions.
+
+2. **Prediction Models**:
+
+   - Multiple models can be defined in the `pf_config` parameter, each with one or more configurations.
+   - **Model Specification**:
+     - A `weight_func` key defines the function used to predict weights.
+     - Each configuration can specify constraints (e.g., min/max weights) or other hyperparameters.
+   - Models are processed sequentially, and their outputs (predicted weights) are stored in the `portfolio_object`.
+
+3. **Rolling Window Backtesting**:
+   - **Purpose**: Ensures the model uses only past data for predictions, avoiding look-ahead bias.
+   - **Parameters**:
+   
+     - `window_size`: Specifies the training period (e.g., "5 years").
+     - `step_size`: Defines the interval between successive training windows (e.g., "1 month").
+     - `offset`: Adds a buffer to avoid overlap or data leakage (e.g., "1 month").
+     
+   - **In-Sample (IS) Testing**:
+   
+     - Optionally adds an in-sample evaluation phase to analyze model fit on the training data.
+
+4. **Parallel Processing**:
+
+   - Utilizes multiple cores for faster computation when `num_cores` is specified.
+   - The `furrr` package enables parallel execution of predictions.
+
+5. **Postprocessing**:
+
+   - Predicted weights are appended to the `portfolio_object`.
+   - Additional postprocessing (e.g., normalization, turnover constraints) is performed later.
+
+#### **Key Parameters and Their Roles**
+
+1. **Data and Features**:
+
+   - **`data`**: Input dataset with all necessary variables.
+   - **`return_label`**: Column name for actual returns, used to calculate portfolio performance.
+   - **`features`**: List of predictor variables for weight prediction.
+
+2. **Benchmarking**:
+
+   - **`benchmark_label`**: Optional column name for benchmark weights.
+   - Allows calculation of metrics like tracking error, information ratio, and active share.
+
+3. **Backtesting Settings**:
+
+   - **`rolling`**: Boolean flag indicating whether to use a rolling window approach.
+   - **`window_size`**: Defines the training period (e.g., "5 years").
+   - **`step_size`**: Specifies the interval between consecutive predictions (e.g., "1 month").
+   - **`offset`**: Ensures predictions don’t use overlapping data.
+
+4. **Model Configurations**:
+
+   - **`pf_config`**: List of models and configurations, each specifying:
+     - Prediction function (`weight_func`).
+     - Constraints like `min_weight` and `max_weight`.
+     - Other model-specific parameters (e.g., regularization terms).
+
+5. **Performance Enhancements**:
+
+   - **`num_cores`**: Enables parallel processing for faster backtesting.
+   - **`verbose`**: Provides progress updates and diagnostic information.
+
+#### **Workflow**
+
+1. **Input Validation**:
+
+   - Ensures the data and parameters meet the required format and constraints.
+
+2. **Rolling Window Setup**:
+
+   - Defines training and prediction periods based on `window_size`, `step_size`, and `offset`.
+
+3. **Weight Prediction**:
+
+   - For each model and configuration:
+   
+     - A weight prediction function (`weight_func`) is applied to the training data.
+     - Predicted weights are stored with associated metadata.
+
+4. **Portfolio Construction**:
+
+   - Predicted weights are appended to the `portfolio_object`.
+   - Subsequent postprocessing handles constraints (e.g., turnover, leverage).
+
+5. **Performance Evaluation**:
+
+   - Metrics like Sharpe Ratio, Sortino Ratio, active share, and turnover are calculated.
+   - Advanced metrics (e.g., conditional VaR) can also be included.
+
+#### **Best Practices for Configuration**
+
+1. **Data Preparation**:
+
+   - Ensure the data is complete and free of missing values.
+   - Use a consistent frequency (e.g., monthly, daily) for `date`.
+
+2. **Model Selection**:
+
+   - Use separate configurations to test different hyperparameters or constraints.
+
+3. **Rolling Window Design**:
+
+   - Use a sufficiently large `window_size` (e.g., 3–5 years) to capture meaningful trends.
+   - Choose a `step_size` that balances granularity and computational cost (e.g., "1 year").
+
+4. **Constraints**:
+
+   - **Weight Limits**: Use `min_weight` and `max_weight` to enforce realistic portfolio allocations, first through the activation function, second through postprocessing.
+   - **Turnover**: Monitor and control trading activity to minimize transaction costs.
+
+5. **Parallelization**:
+
+   - Enable `num_cores` for large datasets or computationally intensive models.
+
+#### **Output**
+
+The resulting `portfolioReturns` object contains:
+
+- **Predicted Weights**: Allocations for each stock over time.
+- **Portfolio Returns**: Periodic returns based on predicted weights.
+- **Benchmark Weights**: If required/given, benchmark allocations.
+- **Benchmark Returns**: If required/given, benchmark returns.
+- **Configurations**: All specs applied during portfolio optimization and postprocessing.
+
+In the following we will step by step introduce the various setups, while simultaneously elaborating on their implications and results.
 
 # Setup
 
 ## Scientific Context and Requirements
 
-The examples presented here are computationally intensive, as they involve training machine learning models and running backtests on financial data. To ensure reproducibility and efficiency:
+The examples presented here are computationally intensive, as they involve training machine learning models and running backtests on financial data. We aim to demonstrate the process of directly optimizing a portfolio and optimizing a portfolio relative to its benchmark. We utilize the dataset provided by Guillaume Coqueret, which accompanies his book "Machine Learning for Factor Investing" available at [mlfactor.com]().
 
-- All results are cached to avoid re-running computations unnecessarily.
-- The Python environment is configured for TensorFlow and Keras integration.
+#### Dataset Description
 
-## Loading Libraries and Setting Up the Environment
+Ac cordingv to thge website, the dataset comprises information on 1,207 stocks listed in the U.S., including firms from Canada and Mexico. It spans from November 1998 to March 2019 and includes 93 firm-specific attributes per time point. These attributes cover various aspects such as valuation (e.g., earning yields, accounting ratios), profitability and quality (e.g., return on equity), momentum and technical analysis (e.g., past returns, relative strength index), risk (e.g., volatilities), estimates (e.g., earnings-per-share), and volume and liquidity (e.g., share turnover). The dataset is not perfectly rectangular; the number of firms and their attributes vary over time, reflecting a realistic financial environment.
+
+#### ibraries and Environment Setup
 
 ```{r setup_libraries, include=TRUE}
 # Load necessary libraries
@@ -64,25 +291,18 @@ reticulate::py_module_available("tensorflow")
 reticulate::py_module_available("keras")
 
 # Load InvestigatoR package
+# library(InvestigatoR)
 devtools::load_all()
 ```
 
----
 
-# Data Preparation
+#### Data Preparation
 
-## Dataset Description
-
-The dataset `data_ml` contains historical financial data, including features like dividend yields, market capitalization, and momentum. These features serve as inputs for training machine learning models to optimize portfolio weights.
-
-The dataset spans multiple assets over a significant time horizon, providing a robust basis for backtesting.
+We now read the data and quickly summarise its poroperties.
 
 ```{r data_overview, echo=TRUE}
 # Load the dataset
 data("data_ml")
-
-# Display dataset structure
-#str(data_ml)
 
 # Summarize the dataset
 data_ml %>%
@@ -93,9 +313,7 @@ data_ml %>%
   )
 ```
 
----
-
-## Filtering the Data for Backtesting
+#### Filtering the Data for Backtesting
 
 To streamline computations, we will:
 
@@ -123,7 +341,7 @@ data_ml_red <- data_ml %>%
 
 ---
 
-## Summarizing the Filtered Dataset
+#### Summarizing the Filtered Dataset
 
 Before proceeding, we summarize the reduced dataset to verify it is ready for backtesting.
 
@@ -138,8 +356,6 @@ data_ml_red %>%
   )
 ```
 
----
-
 This structured setup provides a solid foundation for the backtesting analysis that follows. In the next sections, we will:
 
 - Configure machine learning models for portfolio optimization.
@@ -148,8 +364,134 @@ This structured setup provides a solid foundation for the backtesting analysis t
 
 ---
 
-
 # Standalone Portfolio Optimization
+
+In the world of portfolio management, balancing **risk** and **return** is one of the most critical and challenging objectives. Traditional methods often involve forecasting expected returns for individual assets and then using these forecasts to determine portfolio weights. However, this two-step process introduces several layers of uncertainty, including the challenge of accurately predicting future returns and the potential propagation of forecast errors into portfolio construction.
+
+Standalone portfolio optimization takes a fundamentally different approach. Instead of predicting returns first and then determining weights, this method directly optimizes portfolio weights to achieve a specific objective, such as maximizing the **Sharpe ratio** or optimizing another risk-return tradeoff function like **quadratic utility**.
+
+#### **Why Optimize Portfolio Weights Directly?**
+
+1. **Avoiding Forecasting Errors**:
+
+   - Predicting returns is notoriously difficult and subject to substantial noise and biases.
+   - By directly optimizing portfolio weights, this approach eliminates the dependence on return predictions, focusing instead on achieving a predefined portfolio-level goal.
+
+2. **Customizable Objectives**:
+
+   - The framework can accommodate different objectives beyond the Sharpe ratio, such as:
+   
+     - **Quadratic Utility Maximization**: Balancing expected returns against risk based on investor risk aversion.
+     - **Risk Minimization**: Focusing solely on reducing portfolio volatility.
+     - **ESG Optimization**: Incorporating sustainability constraints and objectives.
+     
+   - This flexibility makes the method adaptable to a wide range of investment mandates.
+
+3. **Improved Practicality**:
+
+   - Direct weight optimization often leads to more stable and actionable portfolios by incorporating practical constraints (e.g., weight bounds, turnover limits) during the optimization process.
+
+#### **The Role of the Sharpe Ratio**
+
+The Sharpe ratio is a cornerstone of modern portfolio optimization and measures the portfolio’s return per unit of risk. Mathematically, it is defined as:
+
+\[
+S = \frac{\mathbb{E}[R_p - R_f]}{\sigma_p}
+\]
+
+Where:
+
+- \( R_p \): Portfolio return.
+- \( R_f \): Risk-free rate.
+- \( \sigma_p \): Portfolio volatility.
+
+Maximizing the Sharpe ratio ensures that the portfolio achieves the highest possible return for a given level of risk. It reflects the fundamental tradeoff in investing: taking on additional risk should lead to proportionally higher returns. However, maximizing the Sharpe ratio is not without challenges:
+
+1. **Estimation Errors**:
+
+   - Estimating the covariance matrix of asset returns accurately is difficult, particularly in high-dimensional settings or with limited data.
+   - Errors in estimation can lead to suboptimal or unstable portfolios.
+
+2. **Nonlinear Optimization**:
+
+   - The Sharpe ratio introduces nonlinearity in the optimization problem, making the computation more complex and prone to numerical instability.
+
+Despite these challenges, the Sharpe ratio remains a widely used and intuitive objective for portfolio optimization.
+
+#### **Alternative Optimization Objectives**
+
+While the Sharpe ratio is a popular choice, other objective functions are worth considering:
+
+1. **Quadratic Utility Maximization**:
+
+   - Incorporates an investor's risk aversion (\( \gamma \)), optimizing for the tradeoff between expected returns and risk:
+     \[
+     U = \mathbb{E}[R_p] - \frac{\gamma}{2} \sigma_p^2
+     \]
+   - Investors with higher risk aversion prioritize minimizing volatility, while those with lower risk aversion seek higher returns.
+
+2. **Minimum Variance Portfolios**:
+
+   - Focuses solely on minimizing risk (\( \sigma_p^2 \)) without considering expected returns.
+   - Useful for highly risk-averse investors or in environments with high return uncertainty.
+
+3. **Other Custom Objectives**:
+
+   - ESG or thematic constraints (e.g., carbon footprint minimization).
+   - Tail risk measures like Value at Risk (VaR) or Conditional VaR (CVaR).
+
+#### **The Benchmark: The Equally Weighted Portfolio**
+
+One of the toughest benchmarks to beat in practice is the **equally weighted portfolio (EWP)**, where each asset is assigned the same weight. Despite its simplicity, the EWP has several attractive properties:
+
+1. **Diversification**:
+
+   - Equal weights ensure no single asset dominates the portfolio, reducing concentration risk.
+
+2. **Robustness**:
+
+   - Unlike optimized portfolios, the EWP does not rely on noisy estimates of returns or covariances, making it less prone to estimation errors.
+
+3. **Simplicity**:
+
+   - The EWP is easy to implement and interpret, making it an appealing benchmark for investors and researchers alike.
+
+Beating the EWP consistently is challenging because it implicitly harnesses the benefits of diversification while avoiding estimation risk. Any optimization approach must demonstrate clear and consistent advantages over this deceptively simple benchmark.
+
+#### **Balancing Risk and Return in Practice**
+
+Balancing risk and return is inherently difficult due to:
+
+- **Uncertainty in Inputs**: Estimates of asset returns, volatilities, and correlations are often noisy and unstable.
+- **Dynamic Market Conditions**: Asset behavior changes over time, requiring adaptive models.
+- **Practical Constraints**: Real-world portfolios must account for turnover costs, leverage limits, and regulatory requirements, which complicate the optimization process.
+
+Standalone portfolio optimization seeks to address these challenges by directly optimizing portfolio weights to align with investor objectives, subject to constraints that reflect real-world considerations.
+
+#### **Outline of the Following Sections**
+
+In the subsequent sections, we will:
+
+1. **Specify Various Optimization Setups**:
+
+   - Define different objective functions and constraints, such as turnover limits, leverage constraints, and weight bounds.
+   - Discuss their theoretical motivations and practical implications.
+
+2. **Elaborate on Their Benefits**:
+
+   - Highlight the advantages of each setup, such as stability, efficiency, or adaptability to specific investment goals.
+
+3. **Evaluate the Produced Weights**:
+
+   - Assess how well the optimized weights align with the intended objectives.
+   - Analyze the resulting portfolios’ diversification and risk characteristics.
+
+4. **Evaluate Portfolio Performance**:
+
+   - Compare the performance of optimized portfolios against benchmarks like the EWP.
+   - Use metrics such as the Sharpe ratio, turnover, active share, and drawdown to provide a comprehensive evaluation.
+
+Standalone portfolio optimization provides a unique and powerful approach to portfolio construction, offering significant advantages over traditional methods. By directly targeting portfolio-level objectives, this method enables investors to navigate the complexities of risk and return more effectively.
 
 Portfolio optimization without constraints often leads to unrealistic allocations, such as extreme leverage or high concentration in specific assets. In this section, we:
 
@@ -162,9 +504,7 @@ Portfolio optimization without constraints often leads to unrealistic allocation
 
 ## Unconstrained optimization
 
-### Step 1: Define Portfolio Settings
-
-To compare different optimization strategies, we define a set of portfolio constraints for backtesting:
+We begin by setting up a incorrectly specified model, which will be used to optimize the portfolio weights. This model will not enforce any constraints, leading to unrealistic allocations (not entirely, as the used output activation will enforce weights between 0 and 1). More specifically, we define a set of portfolio constraints for backtesting:
 
 - **Long-Only**: No short-selling; weights must be non-negative.
 - **Weight Constraints**: Individual weights must not exceed 10%.
@@ -173,17 +513,16 @@ To compare different optimization strategies, we define a set of portfolio const
 
 These constraints will be applied in later sections, but here we start with an unconstrained optimization.
 
----
-
-### Step 2: Simple Keras Model (No Constraints)
-
 #### Model Configuration
 
 We start with a simple Keras model with:
 
-- Three dense layers (6, 3, and 1 unit respectively).
-- *eLU* and *linear* activation for hidden layers and *sigmoid* activation for the output layer.
+- Three dense layers (32, 16, and 1 unit respectively).
+- *eLU* activation for hidden layers and *tanh* activation for the output layer (tanh is bounded between -1 and 1, which we will include, rather than the sigmoid function, for educational purposes).
 - Loss function: `sharpe_ratio_loss` (no penalties applied).
+- Adam optimizer with a learning rate of 0.001.  
+- 50 training epochs (for output reasons, the batch size is automatically set to be the entire training dataset, hence we need a number of epochs to achieve convergence).
+- for reproducibility, we set the random seed to 42 (the answer to everything).
 
 ```{r keras_simple_model, cache=TRUE}
 # Define a simple Keras model configuration
@@ -191,10 +530,15 @@ config_keras_simple <- list(
   layers = list(
     list(type = "dense", units =32, activation = "elu"),
     list(type = "dense", units = 16, activation = "elu"),
-    list(type = "dense", units = 1, activation = "sigmoid")  # Simple sigmoid activation bounded between 0 and 1
+    list(type = "dense", units = 1, activation = "tanh")  # Simple tanh activation bounded between -1 and 1
   ),
   loss = list(
-    name = "sharpe_ratio_loss"  # Standard Sharpe Ratio loss with no penalties
+    name = "sharpe_ratio_loss",  # Standard Sharpe Ratio loss with no penalties
+    transaction_costs = 0,  # 5 basis points transaction costs
+    delta = 0,  # Tolerance level for optimal Sharpe Ratio
+    lambda = 0,  # Diversification penalty
+    leverage = 0,  # Leverage limit
+    eta = 0  # Leverage penalty
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
   epochs = 50,
@@ -203,23 +547,16 @@ config_keras_simple <- list(
 )
 ```
 
----
-
-### Step 3: Backtesting the Unconstrained Portfolio
+### Backtesting the Unconstrained Portfolio
 
 We backtest the portfolio using the unconstrained model. This involves:
 
-- Training the model on a rolling window of historical data.
-- Evaluating performance using metrics like Sharpe Ratio and turnover.
+- Training the model on a rolling 5 year window of historical data.
+- Predicting portfolio weights for one year into the future.
+- Including a one-month offset between training and prediction data to prevent data leakage.
 
 ```{r setupn_backtest_unconstrained, cache=TRUE}
-# Define the portfolio configuration for the unconstrained model
-pf_config_unconstrained <- list(
-  keras_weights_simple = list(
-    weight_func = "keras_weights",
-    config1 = config_keras_simple
-  )
-)
+# Define the portfolio configuration for all subsequent backtests
 return_label <- "R1M_Usd"
 features <- colnames(data_ml_red)[4:95]
 rolling <- TRUE
@@ -228,9 +565,10 @@ step_size <- "1 year"
 offset <- "1 month"
 in_sample <- TRUE
 num_cores <- 12
-verbose <- TRUE
+verbose <- FALSE
 ```
 
+Now we run the backtest:
 
 ```{r run_backtest_unconstrained, cache=TRUE}
 # Run the backtest
@@ -238,7 +576,7 @@ portfolios_raw_unconstrained <- backtesting_weights(
   data = data_ml_red, 
   return_label = return_label, 
   features = features,
-  pf_config = pf_config_unconstrained,
+  pf_config = list(keras_weights_simple = list(weight_func = "keras_weights",config1 = config_keras_simple)),
   rolling = rolling, 
   window_size = window_size, 
   step_size = step_size, 
@@ -249,11 +587,7 @@ portfolios_raw_unconstrained <- backtesting_weights(
 )
 ```
 
----
-
-### Step 4: Analyzing Unconstrained Results
-
-#### Weight Distributions
+#### Result Analysis
 
 Unconstrained optimization often results in extreme weights. We use `summary.weights` to demonstrate this issue.
 
@@ -264,55 +598,65 @@ tt <- summary.weights(portfolios_raw_unconstrained, print=TRUE)
 
 **Observation**: The weight summary reveals:
 
-- Excessive leverage.
-- Concentration in a few assets, leading to poor diversification.
-
----
-
-#### Performance Metrics
+- Large weight differences between -0.9781 an 0.9897, whereas the average weight standard deviation per date is 0.44.
+- Large total turnover at 1929.3, indicating that throughout the backtest, the portfolio was completely turned over 1929 times.
+- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of 34.32.
 
 We can evaluate the portfolio's performance using the `summary.performance` and/or `summary.performance2` functions. These provide insights into key metrics like Sharpe Ratio, turnover, and diversification.
 
 ```{r performance_unconstrained, cache=TRUE, results='asis'}
 # Summarize portfolio performance
-tt <- summary.performance2(portfolios_raw_unconstrained, test=TRUE, print=TRUE)
+tt <- summary.performance2(portfolios_raw_unconstrained, transaction_cost = 0.005, gamma = 3, test=TRUE, print=TRUE)
 ```
 
-**Observation**: While the Sharpe Ratio may appear high, other metrics like turnover and diversification are suboptimal, making the portfolio impractical for real-world use.
+**Observation**: Performance-wise we observe the following:
 
----
+- The Sharpe Ratio is high at 1.0834, (not significantly) larger than the equally weighted benchmark at 0.8494.
+- The turnover, however, is very high at 1929, indicating excessive trading activity relative to the equally weighted benchmark at 17.3122.
+- Taking into account transaction cost at 0.005 (5 basis points), this leads to a turnover-adjusted Sharpe Ratio of 1.0051, which is still above the equally weighted benchmark at 0.8257.
+- Due to the significantly larger annualized return of 8.0815 compared to the benchmark at 0.1875, and the corresponding standard deviation, the certainty equivalent return is very negative at all levels of risk aversion.
 
-### Step 5: Postprocessing the Portfolio
+While the Sharpe Ratio may appear high, other metrics like turnover and diversification are very sub-optimal, making the portfolio impractical for real-world use.
 
-To address these issues, we apply postprocessing to:
+#### Postprocessing the Portfolio
 
-1. Normalize weights to enforce full investment.
-2. Enforce constraints like weight caps and diversification penalties.
+We could try post-optimization enforcement of constraints to improve the portfolio's practicality. Here, we apply a postprocessing configuration to enforce constraints on the portfolio weights:
 
-```{r postprocessing_unconstrained, cache=TRUE, results='asis'}
+```{r postprocessing_unconstrained_w, cache=TRUE, results='asis'}
 # Define postprocessing configuration
 pp_config <- list(
   list(operation = "set_weightsum", 
-       min_weight = 0, max_weight = 0.2,
-       min_sum = 0.8, max_sum=10,
-       allow_short_sale = FALSE)
-)
+       min_weight = 0, max_weight = 0.1, # box constraint on individual assets
+       min_sum = 0.8, max_sum=1.5, # we do not yet include a full-investm,ent constraint without leverage
+       allow_short_sale = FALSE))
 
 # Apply postprocessing
 portfolios_postprocessed <- postprocessing_portfolios(portfolios_raw_unconstrained, pp_config)
 
 # Summarize postprocessed weights
 tt <- summary.weights(portfolios_postprocessed, print=TRUE)
-
-# Evaluate performance after postprocessing
-tt <- summary.performance(portfolios_postprocessed, test=TRUE, print=TRUE)
-tt <- summary.performance2(portfolios_postprocessed, test=TRUE, print=TRUE)
-
 ```
 
----
+**Observation**: The postprocessing step enforces constraints on the portfolio weights, leading to:
 
-### Results and Insights
+- Somehow improved weights, which are now between 0 and 0.0434.
+- The total turnover is reduced to 56.76, indicating a more stable portfolio.
+- The average Herfindahl-Hirschman Index (HHI) is now 0.037, reflecting much better diversification.
+
+Potentially this will make the portfolio be very close to the equally weighted portfolio, but with a slightly higher Sharpe Ratio.
+
+```{r postprocessing_unconstrained_p, cache=TRUE, results='asis'}
+# Evaluate performance after postprocessing
+tt <- summary.performance2(portfolios_postprocessed, transaction_cost = 0.005, gamma = 5, test=TRUE, print=TRUE)
+```
+
+**Observation**: The postprocessed portfolio shows:
+
+- A much better Sharpe ratio, significantly exceeding the equally weighted portfolio at 0.9131.
+- This even holds when applying transaction cost (0.8698 vs. 0.8257), due to a much decreased turnover of 56.76.
+- The certainty equivalent return is now positive for all risk aversion levels $\leq 4$, indicating a more stable and practical portfolio.
+
+#### Results and Insights
 
 1. **Before Postprocessing**:
 
@@ -322,55 +666,31 @@ tt <- summary.performance2(portfolios_postprocessed, test=TRUE, print=TRUE)
 2. **After Postprocessing**:
 
    - Weight distributions improved significantly, adhering to realistic constraints.
-   - Diversification and turnover metrics became more acceptable, making the portfolio viable for real-world implementation.
+   - Diversification and turnover metrics became more acceptable, making the portfolio closer to being usable for real-world implementation.
 
----
 
-## Activation Functions: Enforcing Portfolio Constraints
 
-Activation functions in the **InvestigatoR** package allow users to impose practical constraints on portfolio weights. This section demonstrates:
+## Backtesting the Weight-constrained portfolio
 
-1. Long-only portfolios with `activation_box_sigmoid`.
-2. Fully invested portfolios with `activation_box_sigmoid`.
-3. How combining multiple portfolios with `combine_portfolios` provides a comprehensive summary for analysis.
-
----
-
-### Step 1: Long-Only Portfolio (Box Constraints)
+Activation functions in the **InvestigatoR** package allow users to impose practical constraints on portfolio weights. Therefore, we can enforce constraints like non-negativity, bounded weights, and smooth transitions using activation functions like `activation_box_sigmoid` and `activation_box_tanh`.
 
 The **`activation_box_sigmoid`** ensures:
 
 - Non-negative weights (long-only).
-- Bounded weights, e.g., within [0, 0.2].
+- Bounded weights, e.g., within [0, 0.1].
 - Smooth transitions at the boundaries to avoid discontinuities.
 
 ```{r activation_box_sigmoid, cache=TRUE}
 # Configuration with long-only activation
-config_box_sigmoid <- list(
-  layers = list(
-    list(type = "dense", units = 32, activation = "elu"),
-    list(type = "dense", units = 16, activation = "elu"),
-    list(type = "dense", units = 1, activation = activation_box_sigmoid(min_weight = 0, max_weight = 0.2))
-  ),
-  loss = list(name = "sharpe_ratio_loss"),
-  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 50,
-  verbose = 0,
-  seeds = c(42)
-)
+config_box_sigmoid <- config_keras_simple
+config_box_sigmoid$layers[[3]]$activation <- activation_box_sigmoid(min_weight = 0, max_weight = 0.1)
 
 # Backtest with box-sigmoid activation
-pf_config_box_sigmoid <- list(
-  keras_weights_box_sigmoid = list(
-    weight_func = "keras_weights",
-    config1 = config_box_sigmoid
-  )
-)
 portfolios_box_sigmoid <- backtesting_weights(
   data = data_ml_red, 
   return_label = return_label, 
   features = features, 
-  pf_config = pf_config_box_sigmoid,
+  pf_config = list(keras_weights_box_sigmoid=list(weight_func = "keras_weights",config1 = config_box_sigmoid)),
   rolling = rolling, 
   window_size = window_size, 
   step_size = step_size, 
@@ -380,132 +700,76 @@ portfolios_box_sigmoid <- backtesting_weights(
 )
 ```
 
----
+#### Result Analysis
 
-### Step 2: Alternative specification
+To compare the results with the constrained cases, we use the **`combine_portfolios`** function to aggregate the portfolios.
 
-The **`activation_box_tanh`** ensures:
-
-- Non-negative weights (long-only).
-- Bounded weights, e.g., within [0, 0.2].
-- Smooth transitions at the boundaries to avoid discontinuities (changed activation).
-
-
-```{r activation_box_tanh, cache=TRUE}
-# Configuration with sum constraints
-config_box_tanh <- list(
-  layers = list(
-    list(type = "dense", units = 32, activation = "elu"),
-    list(type = "dense", units = 16, activation = "elu"),
-    list(type = "dense", units = 1, activation = activation_box_tanh(min_weight = 0, max_weight = 0.2))
-  ),
-  loss = list(name = "sharpe_ratio_loss"),
-  optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
-  verbose = 0,
-  seeds = c(42)
-)
-
-# Backtest with box-tanh activation
-pf_config_box_tanh <- list(
-  keras_weights_box_tanh = list(
-    weight_func = "keras_weights",
-    config1 = config_box_tanh
-  )
-)
-portfolios_box_tanh <- backtesting_weights(
-  data = data_ml_red, 
-  return_label = return_label, 
-  features = features, 
-  pf_config = pf_config_box_tanh,
-  rolling = rolling, 
-  window_size = window_size, 
-  step_size = step_size, 
-  offset = offset, 
-  num_cores = num_cores, 
-  verbose = verbose
-)
-```
-
----
-
-### Step 3: Combining Portfolios for Comparative Analysis
-
-To compare the results of the constrained cases, we use the **`combine_portfolios`** function to aggregate the portfolios.
-
-```{r combine_portfolios, cache=TRUE, results='asis'}
-# Apply postprocessing
-portfolios_box_sigmoid_pp <- postprocessing_portfolios(portfolios_box_sigmoid, pp_config)
-portfolios_box_tanh_pp <- postprocessing_portfolios(portfolios_box_tanh, pp_config)
-
+```{r combine_portfolios_w, cache=TRUE, results='asis'}
 # Combine portfolios for comparison
 combined_portfolios <- combine_portfolioReturns(list(
-  portfolios_raw_unconstrained,
   portfolios_postprocessed,
   portfolios_box_sigmoid,
-  portfolios_box_sigmoid_pp,
-  portfolios_box_tanh,
-  portfolios_box_tanh_pp
+  postprocessing_portfolios(portfolios_box_sigmoid, pp_config)
 ))
 
 # Summarize combined weights
 tt <- summary.weights(combined_portfolios, print=TRUE)
-
-# Summarize combined performance
-tt<- summary.performance2(combined_portfolios, test=TRUE, print=TRUE)
 ```
 
----
+**Observation**: The weight summary shows:
 
-### Results and Insights
+- The `activation_box_sigmoid` function naturally enforces bounded weights, leading to more realistic allocations. The maximum weight is now 0.0808 (before postprocessing, which scales it up to 0.1)
+- The average weight standard deviation per date is 0.0046, indicating a very stable distribution.
+- The average Herfindahl-Hirschman Index (HHI) is now very low at 0.0035, reflecting very good diversification, which is scaled up to 0.0289 after postprocessing.
+- The total turnover is 11.45 (38.54 after postprocessing).
 
-1. **Long-Only (Box Constraints)**:
+```{r combine_portfolios_p, cache=TRUE, results='asis'}
+# Summarize combined performance
+tt<- summary.performance2(combined_portfolios, transaction_cost = 0.005, gamma = 3, test=TRUE, print=TRUE)
+```
 
-   - Weights are constrained to non-negative values and limited to 20%.
-   - Improved diversification compared to unconstrained portfolios.
+**Observation**: The performance summary reveals:
 
-2. **Fully Invested (Sum Constraints)**:
+- The annualized Sharpe Ratio of the postprocessed portfolio is 1.1689, significantly exceeding the equally weighted benchmark at 0.8494 and also exceeding the one of the (postprocessed) unconstrained optimization. 
+- Due to the much smaller overall turnover, the turnover-adjusted Sharpe Ratio is 1.1119, the highest among all of those portfolios tested so far!
 
-   - Weights are normalized to sum to 1, ensuring full investment.
-   - Even better diversification and realistic allocation.
+#### Results and Insights
 
-3. **Combined Results**:
+1. **Constrained Portfolio Optimization**:
 
-   - The `combine_portfolios` function allows for easy side-by-side comparisons of weights and performance metrics.
+   - The `activation_box_sigmoid` function enforces practical constraints on portfolio weights.
+   - Improved diversification and reduced turnover compared to unconstrained portfolios.
+   
+2. **Performance Metrics**:
 
-These results highlight the importance of activation functions in creating portfolios that adhere to practical constraints while maintaining robust performance. In the next section, we introduce custom loss functions for further refinement of portfolio optimization.
+   - The constrained portfolio exhibits a higher Sharpe Ratio and lower turnover, indicating better risk-return characteristics.
+   - The portfolio outperforms the equally weighted benchmark and the unconstrained portfolio, especially after postprocessing.
 
----
+These results highlight the importance of activation functions in creating portfolios that adhere to practical constraints while maintaining robust performance. In the next section, we will penalize the loss function with various parameters and observe their impact.
 
-## Portfolio Constraints in `sharpe_ratio_loss`
+## Constraining `sharpe_ratio_loss`
 
 Portfolio optimization often requires balancing return and risk while adhering to practical constraints. The `sharpe_ratio_loss` function in the **InvestigatoR** package provides the flexibility to incorporate various penalties, enabling portfolios to reflect real-world requirements.
 
----
-
-### Parameters in `sharpe_ratio_loss`
-
-#### Key Parameters
+#### Key Parameters in `sharpe_ratio_loss`
 
 1. **Transaction Costs (`transaction_costs`)**:
 
    - Penalizes frequent trading by incorporating proportional costs for portfolio turnover.
    - Higher values discourage frequent rebalancing and reduce costs.
 
-2. **Diversification Penalty (`lambda`)**:
+2. **Diversification Penalty (`delta` and `lambda`)**:
 
    - Encourages broader distribution of portfolio weights, reducing over-concentration in a few assets.
    - Higher values lead to more evenly spread weights.
+   - Target value set at `delta`.
 
-3. **Leverage Constraint (`leverage`)**:
+3. **Leverage Constraint (`leverage` and `eta`)**:
 
-   - Caps the portfolio’s total exposure, limiting risk from over-leveraging.
-   - Values below 1.0 enforce partial investment; 1.0 ensures full investment.
-
-4. **Other Penalties**:
-
-   - **Weight Bounds**: Imposed via the activation function (e.g., `activation_box_tanh`).
-   - **Custom Regularization**: Extensions through L1 or L2 penalties in loss functions.
+   - Encourages balanced exposure by limiting total portfolio leverage.
+   - Higher values of `eta` restrict leverage, reducing risk and instability.
+   - Target value set at `leverage`.
+   
 
 #### Optimization Goals
 
@@ -516,16 +780,14 @@ By adjusting these parameters, `sharpe_ratio_loss` balances:
 
 ---
 
-### Step 1: Transaction Cost Penalty
+### Transaction Cost Penalty
 
 Frequent portfolio rebalancing incurs costs that can erode returns. By setting `transaction_costs`, the loss function penalizes high turnover.
-
-#### Configuration and Backtesting
 
 ```{r transaction_cost_penalty, cache=TRUE}
 # Adjust transaction cost penalty in base configuration
 config_transaction_cost <- config_box_sigmoid
-config_transaction_cost$loss$transaction_costs <- 0.01  # Proportional cost for each transaction
+config_transaction_cost$loss$transaction_costs <- 0.005  # Proportional cost for each transaction
 
 # Backtest
 portfolios_transaction_cost <- backtesting_weights(
@@ -542,32 +804,16 @@ portfolios_transaction_cost <- backtesting_weights(
 )
 ```
 
-#### Results
-
-```{r summarize_transaction_cost, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(postprocessing_portfolios(portfolios_transaction_cost, pp_config), print = TRUE)
-tt <- summary.performance2(postprocessing_portfolios(portfolios_transaction_cost, pp_config), test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Turnover**: Reduced compared to portfolios without transaction cost penalties.
-- **Returns**: Slightly lower, reflecting the cost penalty.
-- **Stability**: Enhanced due to less frequent rebalancing.
-
----
-
-### Step 2: Diversification Penalty
+### Diversification Penalty
 
 Over-concentration in a few assets increases risk. By applying the `lambda` parameter, the loss function encourages more evenly distributed weights.
 
-#### Configuration and Backtesting
 
 ```{r diversification_penalty, cache=TRUE}
 # Adjust diversification penalty in base configuration
 config_diversification <- config_box_sigmoid
 config_diversification$loss$lambda <- 0.5  # Encourage even allocation
+config_diversification$loss$delta <- 0.0289  # Target value for diversification
 
 # Backtest
 portfolios_diversification <- backtesting_weights(
@@ -584,23 +830,7 @@ portfolios_diversification <- backtesting_weights(
 )
 ```
 
-#### Results
-
-```{r summarize_diversification, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(postprocessing_portfolios(portfolios_diversification, pp_config), print = TRUE)
-tt <- summary.performance2(postprocessing_portfolios(portfolios_diversification, pp_config), test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Weight Distribution**: More evenly spread across assets.
-- **Risk**: Reduced due to improved diversification.
-- **Returns**: Slightly lower, offset by lower volatility.
-
----
-
-### Step 3: Leverage Constraint
+### Leverage Constraint
 
 Excessive leverage amplifies risk and can lead to instability. The `leverage` parameter limits total portfolio exposure.
 
@@ -609,7 +839,8 @@ Excessive leverage amplifies risk and can lead to instability. The `leverage` pa
 ```{r leverage_constraint, cache=TRUE}
 # Adjust leverage constraint in base configuration
 config_leverage <- config_box_sigmoid
-config_leverage$loss$leverage <- 1.0  # Cap leverage at 1.0 (fully invested)
+config_leverage$loss$leverage <- 0.8  # Encourage leverage at 0.8 (not fully invested)
+config_leverage$loss$eta <- 0.5  # Leverage penalty
 
 # Backtest
 portfolios_leverage <- backtesting_weights(
@@ -626,32 +857,16 @@ portfolios_leverage <- backtesting_weights(
 )
 ```
 
-#### Results
-
-```{r summarize_leverage, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(postprocessing_portfolios(portfolios_leverage, pp_config), print = TRUE)
-tt <- summary.performance2(postprocessing_portfolios(portfolios_leverage, pp_config), test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Exposure**: Limited to 100% investment, avoiding over-leverage.
-- **Risk**: Controlled by constraining extreme allocations.
-- **Returns**: Balanced with risk due to leverage limits.
-
----
-
-### Step 4: Combined Constraints
-
-#### Configuration and Backtesting
+### Combined Constraints
 
 ```{r combined_constraints, cache=TRUE}
 # Combine all penalties in base configuration
 config_combined <- config_box_sigmoid
-config_combined$loss$transaction_costs <- 0.01
+config_combined$loss$transaction_costs <- 0.005
 config_combined$loss$lambda <- 0.5
+config_combined$loss$delta <- 0.0289
 config_combined$loss$leverage <- 1.0
+config_combined$loss$eta <- 0.5
 
 # Backtest
 portfolios_combined <- backtesting_weights(
@@ -668,58 +883,58 @@ portfolios_combined <- backtesting_weights(
 )
 ```
 
-#### Results
+#### Comparative Analysis
 
-```{r summarize_combined, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(postprocessing_portfolios(portfolios_combined, pp_config), print = TRUE)
-tt <- summary.performance2(postprocessing_portfolios(portfolios_combined, pp_config), test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Balanced Portfolio**: Combines stability, diversification, and leverage control.
-- **Performance**: Optimized for real-world applicability.
-
----
-
-### Comparative Analysis
-
-```{r compare_portfolios, results='asis', cache=TRUE}
+```{r compare_portfolios_w, results='asis', cache=TRUE}
 # Combine portfolios for comparison
 combined_portfolios2 <- combine_portfolioReturns(list(
+  portfolios_postprocessed,
   portfolios_box_sigmoid,
+  postprocessing_portfolios(portfolios_box_sigmoid, pp_config),
   portfolios_transaction_cost,
+  postprocessing_portfolios(portfolios_transaction_cost, pp_config),
   portfolios_diversification,
+  postprocessing_portfolios(portfolios_diversification, pp_config),
   portfolios_leverage,
-  portfolios_combined
+  postprocessing_portfolios(portfolios_leverage, pp_config),
+  portfolios_combined,
+  postprocessing_portfolios(portfolios_combined, pp_config)
 ))
 
 # Summarize combined weights
 tt <- summary.weights(postprocessing_portfolios(combined_portfolios2, pp_config), print = TRUE)
+```
 
+**Observation**: The weight summary shows:
+
+- It is the transaction cost penalty that leads to the most significant changes in turnover, with the nlowest turnover being shown for the combined constraints as well as for the transaction cost constrained portfolio (approx. 32 and 34).
+- Equivalently the lowest diversification in terms of the average Herfindahl-Hirschman Index (HHI) is shown for the diversification constrained portfolios at 0.02, which is only lower for the combined portfolios.
+- It is hard from this analysis to see the impact of the leverage constraint, as the leverage is already at 1.0 for the unconstrained portfolios.
+
+```{r compare_portfolios_p, results='asis', cache=TRUE}
 # Summarize combined performance
 tt <- summary.performance2(postprocessing_portfolios(combined_portfolios2, pp_config), test = TRUE, print = TRUE)
 ```
 
----
+**Observation**: The performance summary reveals:
 
-### Insights
+- All constrained portfolios exhibit Sharpe ratios (out-of-sample and annualized) significantly above 1, even when taking transaction costs properly into account. All cases therefore outperform the equally weighted portfolio.
+- Turnover and Sharpe ratios are smallest for the combined portfolio, signalling too many penalties.
+- Postprocessing has no impact on the combined portfolio, as all features of this portfolio already perfectly adhere to the constraints.
 
-1. **Transaction Costs**: Lower turnover, better stability.
-2. **Diversification**: Risk reduction through even allocation.
-3. **Leverage**: Avoids over-exposure, balancing risk and return.
-4. **Combined Constraints**: Achieves robust, practical portfolios.
+### Conclusion
 
-Here is a scientifically detailed section on **benchmark-based portfolio optimization**, incorporating your precise requirements and focusing on the correct loss functions and constraints. It begins with an unconstrained benchmark case and progresses to more sophisticated configurations.
+In the entire exercise we have learned how to use keras to predict and backtest portfolio weights, that - even taking into account data leakage and avoiding too frequent reestimation - significantly outperform the equally weighted benchmnark. We have also seen how to enforce practical constraints on the portfolio weights, leading to more realistic allocations and better performance. The most significant improvements were achieved by penalizing the loss function with transaction costs, leading to the overall highest Sharpe ratio (by a samll margin).
+
+In the following we will have a look at benchmark portfolios.
 
 ---
 
 # Benchmark-Based Portfolio Optimization
 
-Many portfolio strategies aim to outperform a benchmark, making benchmark-relative optimization critical in practice. The **InvestigatoR** package provides tools to achieve this using:
+Now we come to the even more difficult case of tilting a benchmark in order to outperform it. Many portfolio strategies aim to outperform a benchmark, the **InvestigatoR** package provides tools to achieve this:
 
-1. Loss functions like `sharpe_ratio_difference_loss` and `information_ratio_loss`.
+1. Loss functions like `sharpe_ratio_difference_loss` and `information_ratio_loss_active_returns`.
 2. Customizable activation functions to enforce constraints, including weight changes relative to the benchmark.
 
 This section demonstrates:
@@ -728,11 +943,15 @@ This section demonstrates:
 2. Introducing activation functions for benchmark-relative weights.
 3. Analyzing the impact of L1 and L2 penalties.
 
----
+We begin by setting up a model, which will be used to optimize the portfolio tilts (delta_weights). This model will not enforce any constraints, leading to unrealistic allocations (not entirely, as the used output activation will enforce weights between -1 and 1). More specifically, we define a set of portfolio constraints for backtesting:
 
-## Basic benchmark setup (based on increasing Sharpe ratio vis-a-vis the benchmark)
+- **Long-Short**: Explicit short-selling; tilting portfolio must be self-financing.
+- **Weight Constraints**: Individual weights must be smaller than 10% in absolute value.
+- **Leverage Limit**: Total exposure is capped at 1.0 on both sides (negative weights and positive weights).
 
-### Step 1: Benchmark Definition and Data Setup
+### Basic setup (based on increasing Sharpe ratio vis-a-vis the benchmark)
+
+#### Benchmark Definition and Data Setup
 
 We begin by adding a value-weighted benchmark to the dataset `data_ml_red`.
 
@@ -748,7 +967,7 @@ The benchmark represents a dynamic, market-cap-weighted portfolio used as a refe
 
 ---
 
-### Step 2: Unconstrained Benchmark Optimization
+### Unconstrained Benchmark Optimization
 
 #### Objective
 
@@ -756,7 +975,7 @@ Optimize portfolio weights to maximize the Sharpe Ratio difference from the benc
 
 #### Configuration and Backtesting
 
-```{r unconstrained_benchmark, cache=TRUE}
+```{r unconstrained_benchmark_setup, cache=TRUE}
 # Define a simple Keras model configuration
 # here with different activation function, because we also need negative weights
 config_unconstrained_benchmark <- list(
@@ -771,11 +990,12 @@ config_unconstrained_benchmark <- list(
     lambda_l2 = 0
   ),
   optimizer = list(name = "optimizer_adam", learning_rate = 0.001),
-  epochs = 10,
+  epochs = 50,
   verbose = 0,
   seeds = c(42)  # Set random seed for reproducibility
 )
-
+```
+```{r unconstrained_benchmark_backtest, cache=TRUE}
 # Backtest
 portfolios_bm_unconstrained <- backtesting_weights(
   data = data_ml_red, 
@@ -792,36 +1012,43 @@ portfolios_bm_unconstrained <- backtesting_weights(
 )
 ```
 
----
-
 #### Results
 
-```{r summarize_unconstrained_benchmark, results='asis', cache=TRUE}
+```{r summarize_unconstrained_benchmark_w, results='asis', cache=TRUE}
 # Define postprocessing configuration
-pp_config1_bm <- list(list(operation = "set_weightsum", sum = 0, min_sum = -0.1, max_sum = 0.1, allow_short_sale = TRUE))
-pp_config2_bm <- list(list(operation = "set_weightsum", sum = 0, min_sum = -0.05, max_sum = 0.05, allow_short_sale = TRUE))
+pp_config_bm <- list(list(operation = "set_weightsum", sum = 0, min_weight = -0.1, max_weight = 0.1, min_sum = -1, max_sum = 1, allow_short_sale = TRUE))
 # combine unconstrained and constrained portfolios
 combined_portfolios_bm <- combine_portfolioReturns(list(
   portfolios_bm_unconstrained,
-  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config2_bm))
+  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config_bm))
   )
 
-# Summarize weights and performance
+# Summarize weights 
 tt <- summary.weights(combined_portfolios_bm, print = TRUE)
-tt <- summary.weights(combined_portfolios_bm, use_delta = TRUE, print = TRUE)
-tt <- summary.performance(combined_portfolios_bm, test = TRUE, print = TRUE)
-tt <- summary.performance2(combined_portfolios_bm, test = TRUE, print = TRUE) 
 ```
 
-### Step 3: Constrained Benchmark Optimization
+**Observation**: The weight summary shows:
 
-#### Objective
+- Large weight differences between -0.8536 an 0.9665, whereas the average weight standard deviation per date is 0.33.
+- Large total turnover at 1472.
+- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of 11.8251 (0.0453 after postprocessing).
+
+```{r summarize_unconstrained_benchmark_p, results='asis', cache=TRUE}
+tt <- summary.performance2(combined_portfolios_bm, transaction_cost = 0.005, gamma = 3, test = TRUE, print = TRUE) 
+```
+
+**Observation**: Performance-wise we observe the following:
+
+- The Sharpe ratio is high at 0.9119, larger than the value weighted (given) benchmark at 0.5117, therefore significantly exceeding it for the raw as well as for the postprocessed portfolio.
+- The turnover, reduces down to 98.5347 from 1472 after postprocessing. This leads to a turnover-adjusted Sharpe Ratio of 0.7803, which is still significantly above the benchmark at 0.4844. Also, and most importantly, the information ratio is significant at 0.0743 and 0.0612, indicating that the portfolio is able to outperform the benchmark significantly in raw and postprocessed case, even when taking into account tracking error.
+
+### Constrained Benchmark Optimization
+
+In the next case, we restrict the portfolio weights to ensure they align with the benchmark. We apply activation functions to enforce constraints on the benchmark-relative weights.
 
 Apply constraints:
 
-1. Weights sum to 0 (representing changes from the benchmark).
-2. Weights bounded between -0.1 and 0.1.
+- Weights bounded between -0.1 and 0.1.
 
 #### Updated Activation Configuration
 
@@ -829,8 +1056,8 @@ Apply constraints:
 # Define a new activation for constrained benchmark-relative weights
 config_constrained_bm_activation <- config_unconstrained_benchmark
 config_constrained_bm_activation$layers[[3]]$activation <- activation_box_sigmoid(
-  min_weight = -0.05, 
-  max_weight = 0.05
+  min_weight = -0.1, 
+  max_weight = 0.1
 )
 ```
 
@@ -853,30 +1080,48 @@ portfolios_bm_constrained <- backtesting_weights(
 )
 ```
 
----
-
 #### Results
 
-```{r summarize_constrained_benchmark, results='asis', cache=TRUE}
+```{r summarize_constrained_benchmark_w, results='asis', cache=TRUE}
 # combine unconstrained and constrained portfolios
 combined_portfolios_bm2 <- combine_portfolioReturns(list(
-  portfolios_bm_unconstrained,
-  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config2_bm),
+  postprocessing_portfolios(portfolios_bm_unconstrained, pp_config_bm),
   portfolios_bm_constrained,
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config2_bm)
+  postprocessing_portfolios(portfolios_bm_constrained, pp_config_bm)
   )
   )
 
 # Summarize weights and performance
 tt <- summary.weights(combined_portfolios_bm2, print = TRUE)
-tt <- summary.performance2(combined_portfolios_bm2, test = TRUE, print = TRUE) 
 ```
 
----
+**Observation**: The weight summary shows:
 
-### Step 4: L1 and L2 Penalties
+- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of 0.0222 and 0.0212 (postprocesssed).
+- The average Herfindahl-Hirschman Index (HHI) is 0.0578 and 0.0545, indicating worse diversification, that for the postprocessed unconstrained portfolio.
+- The total turnover is 95.1616, indicating a more stable portfolio (91.2523 after postprocessing).
+
+
+```{r summarize_constrained_benchmark_p, results='asis', cache=TRUE}
+tt <- summary.performance2(combined_portfolios_bm2, transaction_cost = 0.005, gamma = 3, test = TRUE, print = TRUE)
+```
+
+**Observation**: Performance-wise we observe the following:
+
+- The Sharpe ratio is highest at 1.2621, significantly exceeding the benchmark at 0.5117 and larger than the unconstrained and postprocessed portfolio. Most interestingly it is not improving further when postprocessing the portfolios.
+- Even when taking transaction costs into account, the turnover-adjusted Sharpe Ratio is 1.1372 (0.946 for the postprocessed portfolio), which is still significantly above the benchmark at 0.4844.
+- The information ratio is significant at 0.0594 and 0.0731, indicating that the portfolio is able to outperform the benchmark significantly in raw and even further in the postprocessed case, even when taking into account tracking error.
+
+```{r summarize_constrained_benchmark_p2, results='asis', cache=TRUE}
+tt <- summary.performance(combined_portfolios_bm2, test = TRUE, print = TRUE)
+```
+
+**Observation**: Looking at further details, performance-wise we observe:
+
+- Here we find the reason for th larger information ratio of the postprocessed portfolio in relation to the regular constrained portfolio: The alpha is smaller at 0.0195 to 0.0216, while the tracking error is also smaller at 0.2592 to 0.2631. This leads to a higher information ratio of 0.9082 to 0.8171.
+- The beta is significantly lower for the constrained portfolios at 0.3007 and 0.9327, indicating that the portfolios are less prone to systematic or benchmark risk.
+
+### Penalties for `sharpe_ratio_difference_loss`
 
 The `sharpe_ratio_difference_loss` function supports the application of:
 
@@ -889,20 +1134,13 @@ In this step, we:
 2. Combine L1 and L2 penalties.
 3. Analyze the results to understand the impact of each penalty.
 
----
-
-### Step 4a: L1 Penalty Only
-
-#### Configuration
+#### L1 penalty
 
 ```{r l1_penalty_only, cache=TRUE}
 # Apply L1 penalty in the configuration
 config_l1 <- config_constrained_bm_activation
 config_l1$loss$lambda_l1 <- 0.1  # Apply L1 penalty
-config_l1$loss$lambda_l2 <- 0.0   # No L2 penalty
 ```
-
-#### Backtesting
 
 ```{r l1_benchmark, cache=TRUE}
 # Backtest with L1 penalty only
@@ -921,47 +1159,13 @@ portfolios_l1 <- backtesting_weights(
 )
 ```
 
----
-
-#### Results
-
-```{r summarize_l1, results='asis', cache=TRUE}
-# combine unconstrained and constrained portfolios
-combined_portfolios_bm3 <- combine_portfolioReturns(list(
-  portfolios_bm_constrained,
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config2_bm),
-  portfolios_l1,
-  postprocessing_portfolios(portfolios_l1, pp_config1_bm),
-  postprocessing_portfolios(portfolios_l1, pp_config2_bm)
-  )
-  )
-
-# Summarize weights and performance
-tt <- summary.weights(combined_portfolios_bm3, print = TRUE)
-tt <- summary.performance2(combined_portfolios_bm3, test = TRUE, print = TRUE) 
-```
-
-#### Interpretation
-
-- **Sparsity**: Fewer assets deviate from the benchmark.
-- **Turnover**: Reduced due to the smaller number of active positions.
-- **Returns**: May slightly decline due to fewer active deviations.
-
----
-
-### Step 4b: L2 Penalty Only
-
-#### Configuration
+#### L2 penalty
 
 ```{r l2_penalty_only, cache=TRUE}
 # Apply L2 penalty in the configuration
 config_l2 <- config_constrained_bm_activation
-config_l2$loss$lambda_l1 <- 0.0   # No L1 penalty
 config_l2$loss$lambda_l2 <- 0.1   # Apply L2 penalty
 ```
-
-#### Backtesting
 
 ```{r l2_benchmark, cache=TRUE}
 # Backtest with L2 penalty only
@@ -980,38 +1184,7 @@ portfolios_l2 <- backtesting_weights(
 )
 ```
 
----
-
-#### Results
-
-```{r summarize_l2, results='asis', cache=TRUE}
-# combine unconstrained and constrained portfolios
-combined_portfolios_bm4 <- combine_portfolioReturns(list(
-  portfolios_bm_constrained,
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config2_bm),
-  portfolios_l2,
-  postprocessing_portfolios(portfolios_l2, pp_config1_bm),
-  postprocessing_portfolios(portfolios_l2, pp_config2_bm)
-  )
-  )
-
-# Summarize weights and performance
-tt <- summary.weights(combined_portfolios_bm4, print = TRUE)
-tt <- summary.performance2(combined_portfolios_bm4, test = TRUE, print = TRUE) 
-```
-
-#### Interpretation
-
-- **Smooth Deviations**: Weight changes are more evenly distributed.
-- **Turnover**: Higher than L1 but still manageable.
-- **Returns**: May benefit from broader active exposure.
-
----
-
-### Step 4c: Combined L1 and L2 Penalties
-
-#### Configuration
+#### Combined L1 and L2 Penalties
 
 ```{r l1_l2_combined, cache=TRUE}
 # Apply both L1 and L2 penalties
@@ -1019,8 +1192,6 @@ config_l1_l2 <- config_constrained_bm_activation
 config_l1_l2$loss$lambda_l1 <- 0.1  # Apply L1 penalty
 config_l1_l2$loss$lambda_l2 <- 0.1   # Apply L2 penalty
 ```
-
-#### Backtesting
 
 ```{r l1_l2_benchmark_combined, cache=TRUE}
 # Backtest with combined L1 and L2 penalties
@@ -1039,109 +1210,39 @@ portfolios_l1_l2 <- backtesting_weights(
 )
 ```
 
----
-
-#### Results
-
-```{r summarize_l1_l2_combined, results='asis', cache=TRUE}
-# combine unconstrained and constrained portfolios
-combined_portfolios_bm5 <- combine_portfolioReturns(list(
-  portfolios_bm_constrained,
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config1_bm),
-  postprocessing_portfolios(portfolios_bm_constrained, pp_config2_bm),
-  portfolios_l1_l2,
-  postprocessing_portfolios(portfolios_l1_l2, pp_config1_bm),
-  postprocessing_portfolios(portfolios_l1_l2, pp_config2_bm)
-  )
-  )
-
-# Summarize weights and performance
-tt <- summary.weights(combined_portfolios_bm5, print = TRUE)
-tt <- summary.performance2(combined_portfolios_bm5, test = TRUE, print = TRUE) 
-```
-
-#### Interpretation
-
-- **Balanced Deviations**: The combined penalties create a trade-off between sparsity and smoothness.
-- **Turnover**: Controlled by L1 while allowing broader exposure from L2.
-- **Returns**: Balances sparse adjustments with smoother overall changes.
-
----
-
 #### Comparative Analysis
 
-```{r compare_l1_l2, results='asis', cache=TRUE}
+```{r compare_l1_l2_w, results='asis', cache=TRUE}
 # Combine portfolios for comparison
 combined_penalty_portfolios <- combine_portfolioReturns(list(
   portfolios_bm_constrained,
   portfolios_l1,
   portfolios_l2,
-  portfolios_l1_l2
-)
-)
-
-# Summarize combined weights
-tt <- summary.weights(postprocessing_portfolios(combined_penalty_portfolios, pp_config), print = TRUE)
-
-# Summarize combined performance
-tt <- summary.performance2(postprocessing_portfolios(combined_penalty_portfolios, pp_config), test = TRUE, print = TRUE)
-```
-
----
-
-#### Insights
-
-1. **L1 Penalty**:
-
-   - Encourages sparsity, reducing turnover and deviations.
-   - Useful for minimizing trading costs.
-   
-2. **L2 Penalty**:
-
-   - Promotes smooth weight changes, useful for reducing extreme deviations.
-   
-3. **Combined Penalties**:
-
-   - Offers a balanced approach, ensuring reasonable turnover while maintaining smooth deviations.
-
-
-### Combined Analysis
-
-```{r combine_benchmark_portfolios, results='asis', cache=TRUE}
-# Combine all benchmark-optimized portfolios
-combined_benchmark_portfolios <- combine_portfolioReturns(list(
-  portfolios_bm_unconstrained,
-  portfolios_bm_constrained,
-  portfolios_l1_l2
-)
+  portfolios_l1_l2)
 )
 
 # Summarize combined weights
-tt <- summary.weights(postprocessing_portfolios(combined_benchmark_portfolios, pp_config), print = TRUE)
-tt <- summary.weights(postprocessing_portfolios(combined_benchmark_portfolios, pp_config), use_delta = TRUE, print = TRUE)
-
-# Summarize combined performance
-tt <- summary.performance2(postprocessing_portfolios(combined_benchmark_portfolios, pp_config), test = TRUE, print = TRUE)
+tt <- summary.weights(combined_penalty_portfolios, print = TRUE)
 ```
 
----
+**Observation**: The weight summary shows:
 
-#### Insights
+- The L1 penalty leads to more sparse weight distributions, with average standard deviations of 0.0078 and 0.0079.
+- The L2 penalty results in smoother weight distributions, with average standard deviations of 0.0086 and 0.0079.
+- The total turnover is lowest for the L1 penalty at 37.6645, togetehr with the combined l1 and l2 portfolio.
+- Diversification (in terms of diversity) is best for the L2 penalty at 64.1119, followed by the L1 penalty at 62.1236 and the the combined l1 and l2 portfolio.
 
-1. **Unconstrained Benchmark Optimization**:
 
-   - Offers flexibility but can result in unrealistic weight deviations.
-   
-2. **Constrained Optimization**:
+```{r compare_l1_l2_p, results='asis', cache=TRUE}
+# Summarize combined performance
+tt <- summary.performance2(combined_penalty_portfolios, test = TRUE, print = TRUE)
+```
 
-   - Ensures realistic weight changes aligned with benchmark-relative goals.
-   
-3. **L1 and L2 Penalties**:
+**Observation**: Performance-wise we observe the following:
 
-   - L1 creates sparse deviations, useful for minimizing turnover.
-   - L2 smooths weight changes, reducing extreme deviations.
-
----   
+- The Sharpe ratio is highest for the constrained portfolio at 1.2621, significantly exceeding the benchmark at 0.5117 and larger than the portfolios with L1 and L2 penalties. The L1 and L2 penalties lead to Sharpe ratios of 0.5923 and 0.6233, respectively.
+- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at 1.2372, followed by the L1 and L2 portfolios at 0.5795 and 0.6113.
+- The information ratio is highest for the constrained portfolio at 0.0594, followed by the L1 and L2 portfolios at 0.0055 and 0.0255.
 
 ## Information Ratio Loss Optimization
 
@@ -1156,22 +1257,16 @@ This section demonstrates:
 2. **Regression-based `information_ratio_loss`**: Adds alpha and beta modeling for enhanced optimization.
 3. Applying L1 and L2 penalties together to assess their impact.
 
----
-
-### Step 1: Non-Regression-Based `information_ratio_loss`
-
-#### Objective
+### Non-Regression-Based `information_ratio_loss`
 
 Optimize the Information Ratio without regression constraints while applying L1 and L2 penalties to encourage sparse and smooth deviations.
-
----
-
-#### Configuration and Backtesting
 
 ```{r ir_loss_non_regression, cache=TRUE}
 # Define configuration for non-regression information_ratio_loss
 config_ir_non_reg <- config_constrained_bm_activation
 config_ir_non_reg$loss$name <- "information_ratio_loss_active_returns"
+config_ir_non_reg$loss$lambda_l1 <- 0.1  # Apply L1 penalty
+config_ir_non_reg$loss$lambda_l2 <- 0.1   # Apply L2 penalty
 ```
 
 ```{r backtest_ir_non_regression, cache=TRUE}
@@ -1191,25 +1286,7 @@ portfolios_ir_non_reg <- backtesting_weights(
 )
 ```
 
----
-
-#### Results
-
-```{r summarize_ir_non_regression, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(portfolios_ir_non_reg, print = TRUE)
-tt <- summary.performance2(portfolios_ir_non_reg, test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Information Ratio**: Improved relative to unconstrained cases due to optimized active risk management.
-
----
-
-### Step 2: Regression-Based `information_ratio_loss`
-
-#### Objective
+### Regression-Based `information_ratio_loss`
 
 The regression-based version of `information_ratio_loss` introduces alpha and beta modeling:
 
@@ -1217,10 +1294,6 @@ The regression-based version of `information_ratio_loss` introduces alpha and be
 - **Beta**: Sensitivity of portfolio returns to benchmark returns.
 
 By explicitly modeling alpha and beta, this version improves the interpretability and precision of IR optimization.
-
----
-
-#### Configuration and Backtesting
 
 ```{r ir_loss_regression, cache=TRUE}
 # Define configuration for regression-based information_ratio_loss
@@ -1245,63 +1318,364 @@ portfolios_ir_reg <- backtesting_weights(
 )
 ```
 
----
-
-#### Results
-
-```{r summarize_ir_regression, results='asis', cache=TRUE}
-# Summarize weights and performance
-tt <- summary.weights(portfolios_ir_reg, print = TRUE)
-tt <- summary.performance2(portfolios_ir_reg, test = TRUE, print = TRUE)
-```
-
-#### Interpretation
-
-- **Alpha and Beta Insights**:
-
-  - Regression-based optimization provides detailed breakdowns of active returns.
-  - Alpha and beta constraints enhance interpretability.
-  
-- **Information Ratio**: Further refined due to regression-based risk adjustments.
-
----
-
 ### Combined Analysis
 
 #### Comparing Non-Regression and Regression-Based Results
 
-```{r combine_ir_portfolios, results='asis', cache=TRUE}
+```{r combine_ir_portfolios_w, results='asis', cache=TRUE}
 # Combine portfolios for comparison
 combined_ir_portfolios <- combine_portfolioReturns(list(
-  combined_benchmark_portfolios,
+  portfolios_bm_constrained,
+  portfolios_l1_l2,
   portfolios_ir_non_reg,
   portfolios_ir_reg
 ))
 
 # Summarize combined weights
 tt <- summary.weights(combined_ir_portfolios, print = TRUE)
-tt <- summary.weights(combined_ir_portfolios, use_delta = TRUE, print = TRUE)
+```
 
+**Observation**: The weight summary shows:
+
+- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of 0.0079 and 0.0077.
+- The average Herfindahl-Hirschman Index (HHI) is 0.018 and 0.0187, indicating better diversification.
+- The total turnover is lowest for the L1 and L2 penalties at 38.4873, followed by the regression-based portfolio at 38.5421.
+- All in all, the portfolios show not many distinguishing factors.
+
+```{r combine_ir_portfolios_p, results='asis', cache=TRUE}
 # Summarize combined performance
 tt <- summary.performance2(combined_ir_portfolios, test = TRUE, print = TRUE)
 ```
 
----
+**Observation**: Performance-wise we observe the following:
 
-#### Insights
+- The constrained portfolio exhibits the highest Sharpe ratio at 1.2621, significantly exceeding the benchmark at 0.5117.
+- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at 1.2372, followed by the non-regression and regression-based portfolios at 0.6629 and 0.645.
+- The information ratio is highest for the constrained portfolio at 0.0594, followed by the non-regression and regression-based portfolios at 0.0369 and 0.0315.
+- The Certainty Equivalent Return (CER) is highest for the constrained portfolio at 0.2111, followed by the non-regression and regression-based portfolios at 0.0754 and 0.0716.
+- Most interestingly, its not the information ratio based optimal portfolios that shows the highest information rate.
 
-1. **Non-Regression-Based `information_ratio_loss`**:
+# Conclusion
 
-   - Achieves strong IR improvements with L1 and L2 penalties.
-   - Focuses purely on minimizing tracking error and maximizing active return.
+In this notebook, we have demonstrated how to optimize portfolio weights using Keras models in R, focusing on practical constraints and benchmark-relative optimization. We have covered various portfolio optimization types plus different loss functions. 
 
-2. **Regression-Based `information_ratio_loss`**:
+# Appendix
 
-   - Adds alpha and beta decomposition for deeper insights into active risk and return.
-   - Slightly smoother allocations due to regression constraints.
+## Detailed Metrics, Activation Functions, and Postprocessing Routines
 
-3. **L1 and L2 Penalties**:
+#### **Available Metrics**
 
-   - Together, these penalties provide a balance between sparse and smooth deviations.
+1. **Portfolio Metrics (via `summary.performance`)**
 
-This section highlights the versatility of `information_ratio_loss` in benchmark-relative optimization, with and without regression constraints. Let me know if further refinements or comparisons are needed!
+   - **Absolute Metrics:**
+   
+     - Annualized Mean Return
+     - Annualized Volatility
+     - Sharpe Ratio (with Memmel test)
+     - Sortino Ratio
+     - Maximum Drawdown
+     - Skewness and Kurtosis
+     - Value at Risk (VaR) and Conditional VaR (CVaR)
+     
+   - **Relative Metrics:**
+   
+     - Alpha, Beta (CAPM)
+     - Tracking Error
+     - Information Ratio (IR with p-values)
+     
+   - **Additional Metrics:**
+   
+     - Transaction Cost Adjusted Sharpe Ratio
+     - Certainty Equivalent Return (adjusted for risk aversion, γ)
+
+2. **Weight-Based Metrics (via `summary.weights`)**
+
+   - **Statistical Summaries:**
+   
+     - Weight Mean and Standard Deviation (per date and portfolio)
+     - Minimum and Maximum Weight
+     
+   - **Diversity Measures:**
+   
+     - Herfindahl-Hirschman Index (HHI)
+     - Diversity Inverse of HHI
+     
+   - **Norms:**
+   
+     - L1 Norm (sum of absolute weights)
+     - L2 Norm (Euclidean norm)
+     
+   - **Short Positions:**
+   
+     - Count of Short Weights (negative weights)
+     
+   - **Turnover Analysis:**
+   
+     - Average Turnover Per Period
+     - Total Turnover
+
+3. **Correlation Analysis (via `summary.correlation`)**
+
+   - Correlation matrix between portfolio returns and a benchmark or among portfolios.
+
+#### **Activation Functions and Constraints**
+
+1. **Portfolio Weight Normalization (Set Weights Sum):**
+
+   - Ensures weights sum to a specific value (e.g., 1 for fully invested portfolios).
+   - Handles short-sale constraints, min/max weights, and bounds on sum.
+
+2. **Weight Regularization (Flatten Weights):**
+
+   - **L1 Regularization:** Shrinks weights towards zero (lasso-like behavior).
+   - **L2 Regularization:** Penalizes large weights (ridge-like behavior).
+   - **Elastic Net Mixing:** Combines L1 and L2 regularization using a mixing parameter.
+
+3. **Turnover Reduction:**
+
+   - **Linear Smoothing:** Incrementally adjusts weights toward previous values.
+   - **Exponential Smoothing:** Weighted adjustment favoring recent weights.
+
+4. **Diversification Enhancement:**
+
+   - Targets an HHI threshold for diversity.
+   - Adjusts weights to meet desired concentration limits.
+
+#### **Postprocessing Routines**
+
+1. **Weight Adjustments:**
+
+   - Apply constraints (e.g., normalization, bounds).
+   - Adjust for regularization (L1/L2) and diversity (HHI targets).
+   - Reduce portfolio turnover to minimize transaction costs.
+
+2. **Recalculation of Portfolio Returns:**
+
+   - Compute new portfolio returns after weight adjustments.
+   - Integrate with benchmark returns if applicable.
+
+#### **Summary Functions**
+
+1. **`summary.performance`:**
+
+   - Provides a comprehensive analysis of portfolio metrics.
+   - Includes statistical tests for Sharpe ratio, alpha, and IR significance.
+   - Outputs results in a structured table with optional significance stars.
+
+2. **`summary.weights`:**
+
+   - Computes detailed weight statistics and turnover metrics.
+   - Summarizes portfolio diversity and weight constraints.
+
+3. **`summary.correlation`:**
+
+   - Calculates correlation among portfolio returns or against a benchmark.
+   - Produces an easy-to-read correlation matrix.
+
+4. **`summary.performance2`:**
+
+   - Advanced portfolio performance with transaction costs and certainty equivalent returns.
+
+5. **`combine_portfolioReturns`:**
+
+   - Combines multiple `portfolioReturns` objects into one, ensuring consistency across benchmarks and models.
+
+#### **Visualization (`plot.portfolioReturns`)**
+
+- Plots cumulative returns for multiple portfolios.
+- Supports additional PerformanceAnalytics visualizations (e.g., wealth index, rolling statistics).
+
+Certainly! Let’s delve deeper into the various metrics used in portfolio analysis, particularly those that assess distance from a benchmark, regularization, and other key performance factors.
+
+### Keras Metrics
+
+#### **1. Distance from Benchmark Metrics**
+
+##### **L1 Distance from Benchmark (`distance_from_benchmark_l1_metric`)**
+
+- **Definition**: The sum of the absolute differences between portfolio weights and benchmark weights.
+- **Formula**:
+  \[
+  \text{L1 Distance} = \sum_{i=1}^n \left| w_i^\text{portfolio} - w_i^\text{benchmark} \right|
+  \]
+- **Use Case**:
+
+  - Measures deviation from the benchmark in a straightforward way.
+  - Helps control active risk by limiting how far portfolio weights deviate from the benchmark.
+  - Useful for minimizing tracking error in a constrained optimization setting.
+
+##### **L2 Distance from Benchmark (`distance_from_benchmark_l2_metric`)**
+
+- **Definition**: The Euclidean distance between portfolio weights and benchmark weights.
+- **Formula**:
+  \[
+  \text{L2 Distance} = \sqrt{\sum_{i=1}^n \left( w_i^\text{portfolio} - w_i^\text{benchmark} \right)^2}
+  \]
+- **Use Case**:
+
+  - Penalizes larger deviations more heavily than L1.
+  - Smooths weight differences, useful for optimizing risk-adjusted performance.
+
+##### **Tracking Error (TE)**
+
+- **Definition**: The standard deviation of the difference between portfolio returns and benchmark returns over time.
+- **Formula**:
+  \[
+  \text{TE} = \sqrt{\frac{1}{T} \sum_{t=1}^T \left( r_t^\text{portfolio} - r_t^\text{benchmark} \right)^2}
+  \]
+- **Use Case**:
+
+  - Measures how closely the portfolio tracks the benchmark.
+  - A low TE indicates a passive strategy, while a high TE suggests active management.
+
+#### **2. Regularization Metrics**
+
+##### **L1 Norm of Portfolio Weights (`l1_weight_metric`)**
+
+- **Definition**: The sum of the absolute values of portfolio weights.
+- **Formula**:
+  \[
+  \text{L1 Norm} = \sum_{i=1}^n |w_i^\text{portfolio}|
+  \]
+- **Use Case**:
+
+  - Encourages sparsity in portfolio weights, favoring fewer active positions.
+  - Useful for managing transaction costs by limiting the number of trades.
+
+##### **L2 Norm of Portfolio Weights (`l2_weight_metric`)**
+
+- **Definition**: The square root of the sum of squared portfolio weights.
+- **Formula**:
+  \[
+  \text{L2 Norm} = \sqrt{\sum_{i=1}^n \left(w_i^\text{portfolio}\right)^2}
+  \]
+- **Use Case**:
+
+  - Penalizes extreme positions and promotes weight regularization.
+  - Helps prevent overconcentration in specific assets.
+
+#### **3. Performance Metrics**
+
+##### **Sharpe Ratio**
+
+- **Definition**: Measures risk-adjusted return using the ratio of excess return to standard deviation.
+- **Formula**:
+  \[
+  \text{Sharpe Ratio} = \frac{\mathbb{E}[r^\text{portfolio} - r^\text{risk-free}]}{\sigma^\text{portfolio}}
+  \]
+- **Use Case**:
+
+  - Evaluates overall portfolio performance relative to risk taken.
+
+##### **Sortino Ratio**
+
+- **Definition**: Similar to the Sharpe Ratio but only considers downside risk.
+- **Formula**:
+  \[
+  \text{Sortino Ratio} = \frac{\mathbb{E}[r^\text{portfolio} - r^\text{risk-free}]}{\sigma^\text{downside}}
+  \]
+- **Use Case**:
+
+  - Better for asymmetrical return distributions or portfolios with minimal upside volatility.
+
+##### **Information Ratio (IR)**
+
+- **Definition**: Measures risk-adjusted active return relative to a benchmark.
+- **Formula**:
+  \[
+  \text{IR} = \frac{\mathbb{E}[r^\text{portfolio} - r^\text{benchmark}]}{\text{Tracking Error}}
+  \]
+- **Use Case**:
+
+  - Assesses how much excess return is generated per unit of active risk.
+
+#### **4. Diversification Metrics**
+
+##### **Herfindahl-Hirschman Index (HHI)**
+
+- **Definition**: Measures portfolio concentration.
+- **Formula**:
+  \[
+  \text{HHI} = \sum_{i=1}^n \left(w_i^\text{portfolio}\right)^2
+  \]
+- **Use Case**:
+
+  - Low HHI indicates a well-diversified portfolio, while high HHI suggests concentration risk.
+
+##### **Active Share**
+
+- **Definition**: The proportion of portfolio weights differing from the benchmark.
+- **Formula**:
+  \[
+  \text{Active Share} = \frac{1}{2} \sum_{i=1}^n \left| w_i^\text{portfolio} - w_i^\text{benchmark} \right|
+  \]
+- **Use Case**:
+
+  - A measure of active management; values closer to 1 indicate high divergence from the benchmark.
+
+#### **5. Risk Metrics**
+
+##### **Maximum Drawdown**
+
+- **Definition**: The maximum observed loss from a portfolio’s peak value.
+- **Formula**:
+  \[
+  \text{Max Drawdown} = \max_{t} \left(\frac{\text{Portfolio Value}_{\text{peak}} - \text{Portfolio Value}_t}{\text{Portfolio Value}_{\text{peak}}}\right)
+  \]
+- **Use Case**:
+
+  - Measures worst-case risk exposure.
+
+#### **Value at Risk (VaR)**
+
+- **Definition**: The maximum expected loss at a certain confidence level.
+- **Formula** (for a normal distribution):
+  \[
+  \text{VaR} = - \mu + z_\alpha \cdot \sigma
+  \]
+  where \(z_\alpha\) is the critical value for confidence level \(\alpha\).
+- **Use Case**:
+
+  - Quantifies tail risk.
+
+##### **Conditional VaR (CVaR)**
+
+- **Definition**: The expected loss beyond the VaR threshold.
+- **Use Case**:
+
+  - Addresses limitations of VaR by considering extreme losses.
+
+#### **6. Turnover Metrics**
+
+##### **Turnover**
+
+- **Definition**: Measures the trading activity in a portfolio.
+- **Formula**:
+  \[
+  \text{Turnover} = \sum_{i=1}^n |w_i^\text{current} - w_i^\text{previous}|
+  \]
+- **Use Case**:
+
+  - Tracks transaction costs and trading frequency.
+
+#### **Applications of Metrics**
+
+1. **Portfolio Optimization**:
+
+   - Use L1 and L2 distances to control deviations from benchmarks.
+   - Employ diversity metrics to avoid concentration risk.
+   - Minimize turnover for cost-effective portfolio management.
+
+2. **Backtesting**:
+
+   - Evaluate historical performance using Sharpe, Sortino, and Information Ratios.
+   - Analyze drawdowns, VaR, and CVaR for risk assessment.
+
+3. **Regularization**:
+
+   - Apply L1/L2 norms to constrain weights, balancing sparsity and concentration.
+
+4. **Active Management**:
+
+   - Use metrics like Active Share and IR to assess the effectiveness of active strategies.
+

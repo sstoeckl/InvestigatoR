@@ -1111,9 +1111,9 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
     portfolio_returns <- portfolio_returns %>%
       left_join(benchmark, by = "date")
   } else {
-    # if no benchmark is given, check wether portfolio object comes with own benchmark
-    if (portfolio_object$benchmark_returns %>% nrow() > 0){
-      benchmark <- portfolio_object$benchmark_returns
+    # if no benchmark is given, check whether portfolio object comes with own benchmark
+    if (!is.null(portfolio_object$benchmark_returns)){
+      benchmark <- portfolio_object$benchmark_returns %>% select(date, benchmark=benchmark_return)
       # add benchmark to portfolio_returns
       portfolio_returns <- portfolio_returns %>%
         left_join(benchmark, by = "date")
@@ -1331,13 +1331,13 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
   }
 
   # add benchmark returns to portfolio returns only if bm object or expl. given
-  if (!is.null(benchmark_returns) && !is.null(benchmark_weights)){
+  #if (!is.null(portfolio_object$benchmark_returns) && !is.null(portfolio_object$benchmark_weights)){
     portfolio_returns <- portfolio_returns %>%
       left_join(benchmark_returns|> rename(benchmark=benchmark_return), by = "date")
     # and to weights
     weights <- weights %>%
       left_join(benchmark_weights |> rename(benchmark=benchmark_weight), by = c("stock_id","date"))
-  }
+  #}
 
 
   # Convert data to xts for PerformanceAnalytics compatibility
@@ -1646,7 +1646,8 @@ summary.weights <- function(portfolio_object, use_delta = FALSE, print = FALSE) 
 
   # Combine results
   results <- weight_summary %>%
-    left_join(turnover_summary, by = "Portfolio")
+    left_join(turnover_summary, by = "Portfolio") %>%
+    arrange(match(Portfolio, portfolio_names))
 
   # Print the results in a nicely formatted table if `print` is TRUE
   if (print) {
