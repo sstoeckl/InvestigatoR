@@ -1,0 +1,3924 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Dr. Sebastian Stöckl" />
+
+<meta name="date" content="2024-11-28" />
+
+<title>Backtesting Portfolio Weight Optimization</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Backtesting Portfolio Weight
+Optimization</h1>
+<h4 class="author">Dr. Sebastian Stöckl</h4>
+<h4 class="date">2024-11-28</h4>
+
+
+<div id="TOC">
+<ul>
+<li><a href="#introduction" id="toc-introduction">Introduction</a>
+<ul>
+<li><a href="#leveraging-neural-networks-for-portfolio-weight-prediction" id="toc-leveraging-neural-networks-for-portfolio-weight-prediction">Leveraging
+Neural Networks for Portfolio Weight Prediction</a>
+<ul>
+<li><a href="#loss-functions-for-keras_weights" id="toc-loss-functions-for-keras_weights">Loss Functions for
+<code>keras_weights</code></a></li>
+<li><a href="#available-loss-functions-and-parameters" id="toc-available-loss-functions-and-parameters">Available Loss
+Functions and Parameters</a></li>
+<li><a href="#metrics-and-activation-functions-for-keras_weights" id="toc-metrics-and-activation-functions-for-keras_weights">Metrics and
+Activation Functions for <code>keras_weights</code></a></li>
+<li><a href="#objectives" id="toc-objectives">Objectives</a></li>
+<li><a href="#backtesting-framework-overview" id="toc-backtesting-framework-overview">Backtesting Framework
+Overview</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#setup" id="toc-setup">Setup</a>
+<ul>
+<li><a href="#scientific-context-and-requirements" id="toc-scientific-context-and-requirements">Scientific Context and
+Requirements</a></li>
+</ul></li>
+<li><a href="#standalone-portfolio-optimization" id="toc-standalone-portfolio-optimization">Standalone Portfolio
+Optimization</a>
+<ul>
+<li><a href="#unconstrained-optimization" id="toc-unconstrained-optimization">Unconstrained optimization</a>
+<ul>
+<li><a href="#backtesting-the-unconstrained-portfolio" id="toc-backtesting-the-unconstrained-portfolio">Backtesting the
+Unconstrained Portfolio</a></li>
+</ul></li>
+<li><a href="#backtesting-the-weight-constrained-portfolio" id="toc-backtesting-the-weight-constrained-portfolio">Backtesting the
+Weight-constrained portfolio</a></li>
+<li><a href="#constraining-sharpe_ratio_loss" id="toc-constraining-sharpe_ratio_loss">Constraining
+<code>sharpe_ratio_loss</code></a>
+<ul>
+<li><a href="#transaction-cost-penalty" id="toc-transaction-cost-penalty">Transaction Cost Penalty</a></li>
+<li><a href="#diversification-penalty" id="toc-diversification-penalty">Diversification Penalty</a></li>
+<li><a href="#leverage-constraint" id="toc-leverage-constraint">Leverage
+Constraint</a></li>
+<li><a href="#combined-constraints" id="toc-combined-constraints">Combined Constraints</a></li>
+<li><a href="#conclusion" id="toc-conclusion">Conclusion</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#benchmark-based-portfolio-optimization" id="toc-benchmark-based-portfolio-optimization">Benchmark-Based
+Portfolio Optimization</a>
+<ul>
+<li><a href="#basic-setup-based-on-increasing-sharpe-ratio-vis-a-vis-the-benchmark" id="toc-basic-setup-based-on-increasing-sharpe-ratio-vis-a-vis-the-benchmark">Basic
+setup (based on increasing Sharpe ratio vis-a-vis the
+benchmark)</a></li>
+<li><a href="#unconstrained-benchmark-optimization" id="toc-unconstrained-benchmark-optimization">Unconstrained Benchmark
+Optimization</a></li>
+<li><a href="#constrained-benchmark-optimization" id="toc-constrained-benchmark-optimization">Constrained Benchmark
+Optimization</a></li>
+<li><a href="#penalties-for-sharpe_ratio_difference_loss" id="toc-penalties-for-sharpe_ratio_difference_loss">Penalties for
+<code>sharpe_ratio_difference_loss</code></a></li>
+<li><a href="#information-ratio-loss-optimization" id="toc-information-ratio-loss-optimization">Information Ratio Loss
+Optimization</a>
+<ul>
+<li><a href="#non-regression-based-information_ratio_loss" id="toc-non-regression-based-information_ratio_loss">Non-Regression-Based
+<code>information_ratio_loss</code></a></li>
+<li><a href="#regression-based-information_ratio_loss" id="toc-regression-based-information_ratio_loss">Regression-Based
+<code>information_ratio_loss</code></a></li>
+<li><a href="#combined-analysis" id="toc-combined-analysis">Combined
+Analysis</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#conclusion-1" id="toc-conclusion-1">Conclusion</a></li>
+<li><a href="#appendix" id="toc-appendix">Appendix</a>
+<ul>
+<li><a href="#detailed-metrics-activation-functions-and-postprocessing-routines" id="toc-detailed-metrics-activation-functions-and-postprocessing-routines">Detailed
+Metrics, Activation Functions, and Postprocessing Routines</a>
+<ul>
+<li><a href="#keras-metrics" id="toc-keras-metrics">Keras
+Metrics</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p>Modern portfolio optimization requires balancing risk-adjusted
+returns with real-world constraints, such as transaction costs, leverage
+limits, and benchmark adherence. Traditional optimization techniques
+often struggle to incorporate these constraints effectively, leaving
+room for innovative approaches.</p>
+<p>This part of the <strong>InvestigatoR</strong> package leverages
+machine learning, particularly Keras-based models, to address these
+challenges. By offering flexible customization of loss functions,
+penalties, and activations, it enables users to design portfolios that
+maximize performance while adhering to practical constraints.</p>
+<p>This vignette serves to:</p>
+<ol style="list-style-type: decimal">
+<li>Introduce the InvestigatoR package’s capabilities for portfolio
+optimization.</li>
+<li>Demonstrate its functionality through backtesting.</li>
+<li>Validate its methods empirically, showcasing improvements in
+portfolio performance metrics like the Sharpe Ratio and Information
+Ratio.</li>
+</ol>
+<div id="leveraging-neural-networks-for-portfolio-weight-prediction" class="section level2">
+<h2>Leveraging Neural Networks for Portfolio Weight Prediction</h2>
+<p>Portfolio weight prediction in the <strong>InvestigatoR</strong>
+package is achieved using the <code>keras_weights</code> function, which
+leverages the power of TensorFlow and Keras to train neural networks.
+This approach provides:</p>
+<ul>
+<li><strong>Flexibility</strong>: Easy customization of loss functions,
+activation functions, and metrics.</li>
+<li><strong>Scalability</strong>: Ability to handle large datasets and
+numerous features efficiently.</li>
+<li><strong>Extensibility</strong>: Support for diverse portfolio
+optimization objectives through modular loss functions.</li>
+</ul>
+<hr />
+<div id="loss-functions-for-keras_weights" class="section level3">
+<h3>Loss Functions for <code>keras_weights</code></h3>
+<p>The <code>keras_weights</code> function leverages the flexibility of
+<strong>Keras</strong> and <strong>TensorFlow</strong> to enable weight
+prediction for portfolio optimization tasks. It supports highly
+customizable configurations through user-defined layers, activation
+functions, loss functions, optimizers, and metrics. The modularity of
+this setup allows users to experiment with various optimization
+objectives, including Sharpe ratio, Information ratio, and active
+returns, while incorporating constraints like L1/L2 regularization,
+leverage, and diversification penalties.</p>
+</div>
+<div id="available-loss-functions-and-parameters" class="section level3">
+<h3>Available Loss Functions and Parameters</h3>
+<ol style="list-style-type: decimal">
+<li><p><strong><code>sharpe_ratio_loss</code></strong></p>
+<ul>
+<li><p><strong>Objective</strong>: Maximizes the Sharpe Ratio of
+portfolio returns.</p></li>
+<li><p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>transaction_costs</code>: Penalizes frequent rebalancing to
+reduce costs.</li>
+<li><code>delta</code>: Tolerance level for achieving the optimal Sharpe
+Ratio.</li>
+<li><code>lambda</code>: Diversification penalty, encouraging broader
+allocation.</li>
+<li><code>leverage</code>: Constraint on total portfolio exposure.</li>
+<li><code>eta</code>: Leverage penalty, discouraging extreme
+allocations.</li>
+</ul></li>
+</ul></li>
+<li><p><strong><code>sharpe_ratio_difference_loss</code></strong></p>
+<ul>
+<li><p><strong>Objective</strong>: Maximizes the Sharpe Ratio of active
+returns (portfolio return minus benchmark return).</p></li>
+<li><p><strong>Parameters</strong>:</p>
+<ul>
+<li>Same as <code>sharpe_ratio_loss</code>, with additional
+<code>benchmark_label</code> for specifying the benchmark.</li>
+</ul></li>
+</ul></li>
+<li><p><strong><code>information_ratio_loss_active_returns</code></strong></p>
+<ul>
+<li><p><strong>Objective</strong>: Maximizes the Information Ratio,
+balancing active returns and tracking error.</p></li>
+<li><p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>lambda_l1</code>: Encourages sparsity in active weight
+changes.</li>
+<li><code>lambda_l2</code>: Promotes smooth weight deviations.</li>
+</ul></li>
+</ul></li>
+<li><p><strong><code>information_ratio_loss_regression_based</code></strong></p>
+<ul>
+<li><p><strong>Objective</strong>: Maximizes the Information Ratio,
+based on regression alpha and idiosyncratic volatility.</p></li>
+<li><p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>lambda_l1</code>: Encourages sparsity in active weight
+changes.</li>
+<li><code>lambda_l2</code>: Promotes smooth weight deviations.</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Custom Loss Functions</strong></p>
+<ul>
+<li>Users can define their loss functions by specifying objectives and
+penalties, integrating seamlessly with <code>keras_weights</code>.</li>
+</ul></li>
+</ol>
+<hr />
+</div>
+<div id="metrics-and-activation-functions-for-keras_weights" class="section level3">
+<h3>Metrics and Activation Functions for <code>keras_weights</code></h3>
+<p>Metrics provide additional performance measures during training,
+complementing the loss functions. Examples include:</p>
+<ul>
+<li>Portfolio return metrics (e.g., cumulative return, annualized
+return).</li>
+<li>Risk-adjusted performance metrics (e.g., Sharpe Ratio, Information
+Ratio).</li>
+<li>Constraints validation metrics (e.g., turnover, leverage).</li>
+</ul>
+<p>Metrics can be customized to align with specific portfolio
+objectives, offering valuable insights during model training.</p>
+<p>Activation functions in <code>keras_weights</code> control the
+characteristics of portfolio weights, ensuring adherence to practical
+constraints.</p>
+<div id="available-activation-functions" class="section level4">
+<h4>Available Activation Functions</h4>
+<ol style="list-style-type: decimal">
+<li><strong><code>activation_box_sigmoid</code></strong>
+<ul>
+<li><strong>Objective</strong>: Constrain weights to a specific range
+(e.g., [0, 0.2]).</li>
+<li><strong>Parameters</strong>:
+<ul>
+<li><code>min_weight</code>: Lower bound for weights.</li>
+<li><code>max_weight</code>: Upper bound for weights.</li>
+</ul></li>
+</ul></li>
+<li><strong><code>activation_box_tanh</code></strong>
+<ul>
+<li><strong>Objective</strong>: Constrain weights within a symmetric
+range (e.g., [-0.1, 0.1]).</li>
+<li><strong>Parameters</strong>:
+<ul>
+<li><code>min_weight</code>: Lower bound for weights.</li>
+<li><code>max_weight</code>: Upper bound for weights.</li>
+</ul></li>
+</ul></li>
+</ol>
+<p>These activation functions allow the user to impose realistic
+constraints on portfolio allocations, ensuring practical applicability.
+Also, self-provided activation functions can be used.</p>
+</div>
+</div>
+<div id="objectives" class="section level3">
+<h3>Objectives</h3>
+<p>The following sections demonstrate: 1. <strong>Direct Portfolio
+Optimization</strong>: Training neural networks to directly optimize
+weights without a benchmark. 2. <strong>Benchmark-Relative
+Optimization</strong>: Enhancing portfolio performance relative to a
+benchmark, leveraging advanced loss functions and constraints.</p>
+</div>
+<div id="backtesting-framework-overview" class="section level3">
+<h3>Backtesting Framework Overview</h3>
+<p>The <strong>backtesting_weights</strong> function provides a robust
+and flexible framework for predicting portfolio weights using various
+models and evaluating their performance. Here’s a detailed explanation
+of its components, parameters, and best practices for configuration.</p>
+<div id="key-components-of-the-framework" class="section level4">
+<h4><strong>Key Components of the Framework</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Data Input</strong>:</p>
+<ul>
+<li><strong>Format</strong>: The data must be in a long format with
+columns for <code>stock_id</code>, <code>date</code>, feature variables,
+actual returns, benchmark weights (if any), and an optional mask.</li>
+<li><strong>Features</strong>: The user specifies which feature columns
+will be used by the model for weight predictions.</li>
+</ul></li>
+<li><p><strong>Prediction Models</strong>:</p>
+<ul>
+<li>Multiple models can be defined in the <code>pf_config</code>
+parameter, each with one or more configurations.</li>
+<li><strong>Model Specification</strong>:
+<ul>
+<li>A <code>weight_func</code> key defines the function used to predict
+weights.</li>
+<li>Each configuration can specify constraints (e.g., min/max weights)
+or other hyperparameters.</li>
+</ul></li>
+<li>Models are processed sequentially, and their outputs (predicted
+weights) are stored in the <code>portfolio_object</code>.</li>
+</ul></li>
+<li><p><strong>Rolling Window Backtesting</strong>:</p>
+<ul>
+<li><p><strong>Purpose</strong>: Ensures the model uses only past data
+for predictions, avoiding look-ahead bias.</p></li>
+<li><p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>window_size</code>: Specifies the training period (e.g., “5
+years”).</li>
+<li><code>step_size</code>: Defines the interval between successive
+training windows (e.g., “1 month”).</li>
+<li><code>offset</code>: Adds a buffer to avoid overlap or data leakage
+(e.g., “1 month”).</li>
+</ul></li>
+<li><p><strong>In-Sample (IS) Testing</strong>:</p>
+<ul>
+<li>Optionally adds an in-sample evaluation phase to analyze model fit
+on the training data.</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Parallel Processing</strong>:</p>
+<ul>
+<li>Utilizes multiple cores for faster computation when
+<code>num_cores</code> is specified.</li>
+<li>The <code>furrr</code> package enables parallel execution of
+predictions.</li>
+</ul></li>
+<li><p><strong>Postprocessing</strong>:</p>
+<ul>
+<li>Predicted weights are appended to the
+<code>portfolio_object</code>.</li>
+<li>Additional postprocessing (e.g., normalization, turnover
+constraints) is performed later.</li>
+</ul></li>
+</ol>
+</div>
+<div id="key-parameters-and-their-roles" class="section level4">
+<h4><strong>Key Parameters and Their Roles</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Data and Features</strong>:</p>
+<ul>
+<li><strong><code>data</code></strong>: Input dataset with all necessary
+variables.</li>
+<li><strong><code>return_label</code></strong>: Column name for actual
+returns, used to calculate portfolio performance.</li>
+<li><strong><code>features</code></strong>: List of predictor variables
+for weight prediction.</li>
+</ul></li>
+<li><p><strong>Benchmarking</strong>:</p>
+<ul>
+<li><strong><code>benchmark_label</code></strong>: Optional column name
+for benchmark weights.</li>
+<li>Allows calculation of metrics like tracking error, information
+ratio, and active share.</li>
+</ul></li>
+<li><p><strong>Backtesting Settings</strong>:</p>
+<ul>
+<li><strong><code>rolling</code></strong>: Boolean flag indicating
+whether to use a rolling window approach.</li>
+<li><strong><code>window_size</code></strong>: Defines the training
+period (e.g., “5 years”).</li>
+<li><strong><code>step_size</code></strong>: Specifies the interval
+between consecutive predictions (e.g., “1 month”).</li>
+<li><strong><code>offset</code></strong>: Ensures predictions don’t use
+overlapping data.</li>
+</ul></li>
+<li><p><strong>Model Configurations</strong>:</p>
+<ul>
+<li><strong><code>pf_config</code></strong>: List of models and
+configurations, each specifying:
+<ul>
+<li>Prediction function (<code>weight_func</code>).</li>
+<li>Constraints like <code>min_weight</code> and
+<code>max_weight</code>.</li>
+<li>Other model-specific parameters (e.g., regularization terms).</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Performance Enhancements</strong>:</p>
+<ul>
+<li><strong><code>num_cores</code></strong>: Enables parallel processing
+for faster backtesting.</li>
+<li><strong><code>verbose</code></strong>: Provides progress updates and
+diagnostic information.</li>
+</ul></li>
+</ol>
+</div>
+<div id="workflow" class="section level4">
+<h4><strong>Workflow</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Input Validation</strong>:</p>
+<ul>
+<li>Ensures the data and parameters meet the required format and
+constraints.</li>
+</ul></li>
+<li><p><strong>Rolling Window Setup</strong>:</p>
+<ul>
+<li>Defines training and prediction periods based on
+<code>window_size</code>, <code>step_size</code>, and
+<code>offset</code>.</li>
+</ul></li>
+<li><p><strong>Weight Prediction</strong>:</p>
+<ul>
+<li><p>For each model and configuration:</p>
+<ul>
+<li>A weight prediction function (<code>weight_func</code>) is applied
+to the training data.</li>
+<li>Predicted weights are stored with associated metadata.</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Portfolio Construction</strong>:</p>
+<ul>
+<li>Predicted weights are appended to the
+<code>portfolio_object</code>.</li>
+<li>Subsequent postprocessing handles constraints (e.g., turnover,
+leverage).</li>
+</ul></li>
+<li><p><strong>Performance Evaluation</strong>:</p>
+<ul>
+<li>Metrics like Sharpe Ratio, Sortino Ratio, active share, and turnover
+are calculated.</li>
+<li>Advanced metrics (e.g., conditional VaR) can also be included.</li>
+</ul></li>
+</ol>
+</div>
+<div id="best-practices-for-configuration" class="section level4">
+<h4><strong>Best Practices for Configuration</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Data Preparation</strong>:</p>
+<ul>
+<li>Ensure the data is complete and free of missing values.</li>
+<li>Use a consistent frequency (e.g., monthly, daily) for
+<code>date</code>.</li>
+</ul></li>
+<li><p><strong>Model Selection</strong>:</p>
+<ul>
+<li>Use separate configurations to test different hyperparameters or
+constraints.</li>
+</ul></li>
+<li><p><strong>Rolling Window Design</strong>:</p>
+<ul>
+<li>Use a sufficiently large <code>window_size</code> (e.g., 3–5 years)
+to capture meaningful trends.</li>
+<li>Choose a <code>step_size</code> that balances granularity and
+computational cost (e.g., “1 year”).</li>
+</ul></li>
+<li><p><strong>Constraints</strong>:</p>
+<ul>
+<li><strong>Weight Limits</strong>: Use <code>min_weight</code> and
+<code>max_weight</code> to enforce realistic portfolio allocations,
+first through the activation function, second through
+postprocessing.</li>
+<li><strong>Turnover</strong>: Monitor and control trading activity to
+minimize transaction costs.</li>
+</ul></li>
+<li><p><strong>Parallelization</strong>:</p>
+<ul>
+<li>Enable <code>num_cores</code> for large datasets or computationally
+intensive models.</li>
+</ul></li>
+</ol>
+</div>
+<div id="output" class="section level4">
+<h4><strong>Output</strong></h4>
+<p>The resulting <code>portfolioReturns</code> object contains:</p>
+<ul>
+<li><strong>Predicted Weights</strong>: Allocations for each stock over
+time.</li>
+<li><strong>Portfolio Returns</strong>: Periodic returns based on
+predicted weights.</li>
+<li><strong>Benchmark Weights</strong>: If required/given, benchmark
+allocations.</li>
+<li><strong>Benchmark Returns</strong>: If required/given, benchmark
+returns.</li>
+<li><strong>Configurations</strong>: All specs applied during portfolio
+optimization and postprocessing.</li>
+</ul>
+<p>In the following we will step by step introduce the various setups,
+while simultaneously elaborating on their implications and results.</p>
+</div>
+</div>
+</div>
+</div>
+<div id="setup" class="section level1">
+<h1>Setup</h1>
+<div id="scientific-context-and-requirements" class="section level2">
+<h2>Scientific Context and Requirements</h2>
+<p>The examples presented here are computationally intensive, as they
+involve training machine learning models and running backtests on
+financial data. We aim to demonstrate the process of directly optimizing
+a portfolio and optimizing a portfolio relative to its benchmark. We
+utilize the dataset provided by Guillaume Coqueret, which accompanies
+his book “Machine Learning for Factor Investing” available at <a href>mlfactor.com</a>.</p>
+<div id="dataset-description" class="section level4">
+<h4>Dataset Description</h4>
+<p>Ac cordingv to thge website, the dataset comprises information on
+1,207 stocks listed in the U.S., including firms from Canada and Mexico.
+It spans from November 1998 to March 2019 and includes 93 firm-specific
+attributes per time point. These attributes cover various aspects such
+as valuation (e.g., earning yields, accounting ratios), profitability
+and quality (e.g., return on equity), momentum and technical analysis
+(e.g., past returns, relative strength index), risk (e.g.,
+volatilities), estimates (e.g., earnings-per-share), and volume and
+liquidity (e.g., share turnover). The dataset is not perfectly
+rectangular; the number of firms and their attributes vary over time,
+reflecting a realistic financial environment.</p>
+</div>
+<div id="ibraries-and-environment-setup" class="section level4">
+<h4>ibraries and Environment Setup</h4>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># Load necessary libraries</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(reticulate)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(tensorflow)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="fu">library</span>(keras3)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="fu">library</span>(tibble)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="fu">library</span>(PerformanceAnalytics)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co"># Set up the Python virtual environment</span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>reticulate<span class="sc">::</span><span class="fu">use_virtualenv</span>(<span class="st">&quot;../../python/&quot;</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co"># Confirm TensorFlow and Keras availability</span></span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a>reticulate<span class="sc">::</span><span class="fu">py_config</span>()  </span></code></pre></div>
+<pre><code>## python:         /home/sstoeckl/Packages/python/bin/python
+## libpython:      /usr/lib/python3.10/config-3.10-x86_64-linux-gnu/libpython3.10.so
+## pythonhome:     /home/sstoeckl/Packages/python:/home/sstoeckl/Packages/python
+## version:        3.10.12 (main, Sep 11 2024, 15:47:36) [GCC 11.4.0]
+## numpy:          /home/sstoeckl/Packages/python/lib/python3.10/site-packages/numpy
+## numpy_version:  1.26.4
+## keras:          /home/sstoeckl/Packages/python/lib/python3.10/site-packages/keras
+## 
+## NOTE: Python version was forced by use_python() function</code></pre>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>reticulate<span class="sc">::</span><span class="fu">py_module_available</span>(<span class="st">&quot;tensorflow&quot;</span>)</span></code></pre></div>
+<pre><code>## [1] TRUE</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>reticulate<span class="sc">::</span><span class="fu">py_module_available</span>(<span class="st">&quot;keras&quot;</span>)</span></code></pre></div>
+<pre><code>## [1] TRUE</code></pre>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># Load InvestigatoR package</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co"># library(InvestigatoR)</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>()</span></code></pre></div>
+</div>
+<div id="data-preparation" class="section level4">
+<h4>Data Preparation</h4>
+<p>We now read the data and quickly summarise its poroperties.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># Load the dataset</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="fu">data</span>(<span class="st">&quot;data_ml&quot;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co"># Summarize the dataset</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>data_ml <span class="sc">%&gt;%</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>    <span class="at">n_assets =</span> <span class="fu">n_distinct</span>(stock_id),</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>    <span class="at">start_date =</span> <span class="fu">min</span>(date),</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>    <span class="at">end_date =</span> <span class="fu">max</span>(date)</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  )</span></code></pre></div>
+<pre><code>## # A tibble: 1 × 3
+##   n_assets start_date end_date  
+##      &lt;int&gt; &lt;date&gt;     &lt;date&gt;    
+## 1     1207 1998-11-30 2019-03-31</code></pre>
+</div>
+<div id="filtering-the-data-for-backtesting" class="section level4">
+<h4>Filtering the Data for Backtesting</h4>
+<p>To streamline computations, we will:</p>
+<ol style="list-style-type: decimal">
+<li>Restrict the dataset to the 100 assets with the most complete
+data.</li>
+<li>Limit the time period to 2000-01-01 through 2015-12-31.</li>
+</ol>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="co"># Identify assets with complete data for the full time period</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>stock_ids <span class="ot">&lt;-</span> data_ml <span class="sc">%&gt;%</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="fu">group_by</span>(stock_id) <span class="sc">%&gt;%</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>    <span class="at">start_date =</span> <span class="fu">min</span>(date),</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>    <span class="at">end_date =</span> <span class="fu">max</span>(date),</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>    <span class="at">n_obs =</span> <span class="fu">n</span>()</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>  <span class="fu">filter</span>(n_obs <span class="sc">==</span> <span class="fu">max</span>(n_obs)) <span class="sc">%&gt;%</span> </span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>  <span class="fu">distinct</span>(stock_id) <span class="co">#%&gt;%</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>  <span class="co">#dplyr::slice(1:100)  # Limit to 100 assets for speed</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co"># Filter the dataset to a reduced subset</span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>data_ml_red <span class="ot">&lt;-</span> data_ml <span class="sc">%&gt;%</span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>  <span class="fu">right_join</span>(stock_ids, <span class="at">by =</span> <span class="st">&quot;stock_id&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a>  <span class="fu">filter</span>(date <span class="sc">&gt;=</span> <span class="st">&quot;2000-01-01&quot;</span>, date <span class="sc">&lt;=</span> <span class="st">&quot;2015-12-31&quot;</span>)</span></code></pre></div>
+<hr />
+</div>
+<div id="summarizing-the-filtered-dataset" class="section level4">
+<h4>Summarizing the Filtered Dataset</h4>
+<p>Before proceeding, we summarize the reduced dataset to verify it is
+ready for backtesting.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="co"># Summarize filtered dataset</span></span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>data_ml_red <span class="sc">%&gt;%</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>    <span class="at">n_assets =</span> <span class="fu">n_distinct</span>(stock_id),</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>    <span class="at">n_periods =</span> <span class="fu">n_distinct</span>(date),</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>    <span class="at">start_date =</span> <span class="fu">min</span>(date),</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>    <span class="at">end_date =</span> <span class="fu">max</span>(date)</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>  )</span></code></pre></div>
+<pre><code>## # A tibble: 1 × 4
+##   n_assets n_periods start_date end_date  
+##      &lt;int&gt;     &lt;int&gt; &lt;date&gt;     &lt;date&gt;    
+## 1      372       192 2000-01-31 2015-12-31</code></pre>
+<p>This structured setup provides a solid foundation for the backtesting
+analysis that follows. In the next sections, we will:</p>
+<ul>
+<li>Configure machine learning models for portfolio optimization.</li>
+<li>Evaluate standalone and benchmark-tilted optimization
+techniques.</li>
+<li>Empirically validate their performance through metrics like the
+Sharpe Ratio and Information Ratio.</li>
+</ul>
+<hr />
+</div>
+</div>
+</div>
+<div id="standalone-portfolio-optimization" class="section level1">
+<h1>Standalone Portfolio Optimization</h1>
+<p>In the world of portfolio management, balancing <strong>risk</strong>
+and <strong>return</strong> is one of the most critical and challenging
+objectives. Traditional methods often involve forecasting expected
+returns for individual assets and then using these forecasts to
+determine portfolio weights. However, this two-step process introduces
+several layers of uncertainty, including the challenge of accurately
+predicting future returns and the potential propagation of forecast
+errors into portfolio construction.</p>
+<p>Standalone portfolio optimization takes a fundamentally different
+approach. Instead of predicting returns first and then determining
+weights, this method directly optimizes portfolio weights to achieve a
+specific objective, such as maximizing the <strong>Sharpe ratio</strong>
+or optimizing another risk-return tradeoff function like
+<strong>quadratic utility</strong>.</p>
+<div id="why-optimize-portfolio-weights-directly" class="section level4">
+<h4><strong>Why Optimize Portfolio Weights Directly?</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Avoiding Forecasting Errors</strong>:</p>
+<ul>
+<li>Predicting returns is notoriously difficult and subject to
+substantial noise and biases.</li>
+<li>By directly optimizing portfolio weights, this approach eliminates
+the dependence on return predictions, focusing instead on achieving a
+predefined portfolio-level goal.</li>
+</ul></li>
+<li><p><strong>Customizable Objectives</strong>:</p>
+<ul>
+<li><p>The framework can accommodate different objectives beyond the
+Sharpe ratio, such as:</p>
+<ul>
+<li><strong>Quadratic Utility Maximization</strong>: Balancing expected
+returns against risk based on investor risk aversion.</li>
+<li><strong>Risk Minimization</strong>: Focusing solely on reducing
+portfolio volatility.</li>
+<li><strong>ESG Optimization</strong>: Incorporating sustainability
+constraints and objectives.</li>
+</ul></li>
+<li><p>This flexibility makes the method adaptable to a wide range of
+investment mandates.</p></li>
+</ul></li>
+<li><p><strong>Improved Practicality</strong>:</p>
+<ul>
+<li>Direct weight optimization often leads to more stable and actionable
+portfolios by incorporating practical constraints (e.g., weight bounds,
+turnover limits) during the optimization process.</li>
+</ul></li>
+</ol>
+</div>
+<div id="the-role-of-the-sharpe-ratio" class="section level4">
+<h4><strong>The Role of the Sharpe Ratio</strong></h4>
+<p>The Sharpe ratio is a cornerstone of modern portfolio optimization
+and measures the portfolio’s return per unit of risk. Mathematically, it
+is defined as:</p>
+<p><span class="math display">\[
+S = \frac{\mathbb{E}[R_p - R_f]}{\sigma_p}
+\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(R_p\)</span>: Portfolio return.</li>
+<li><span class="math inline">\(R_f\)</span>: Risk-free rate.</li>
+<li><span class="math inline">\(\sigma_p\)</span>: Portfolio
+volatility.</li>
+</ul>
+<p>Maximizing the Sharpe ratio ensures that the portfolio achieves the
+highest possible return for a given level of risk. It reflects the
+fundamental tradeoff in investing: taking on additional risk should lead
+to proportionally higher returns. However, maximizing the Sharpe ratio
+is not without challenges:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Estimation Errors</strong>:</p>
+<ul>
+<li>Estimating the covariance matrix of asset returns accurately is
+difficult, particularly in high-dimensional settings or with limited
+data.</li>
+<li>Errors in estimation can lead to suboptimal or unstable
+portfolios.</li>
+</ul></li>
+<li><p><strong>Nonlinear Optimization</strong>:</p>
+<ul>
+<li>The Sharpe ratio introduces nonlinearity in the optimization
+problem, making the computation more complex and prone to numerical
+instability.</li>
+</ul></li>
+</ol>
+<p>Despite these challenges, the Sharpe ratio remains a widely used and
+intuitive objective for portfolio optimization.</p>
+</div>
+<div id="alternative-optimization-objectives" class="section level4">
+<h4><strong>Alternative Optimization Objectives</strong></h4>
+<p>While the Sharpe ratio is a popular choice, other objective functions
+are worth considering:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Quadratic Utility Maximization</strong>:</p>
+<ul>
+<li>Incorporates an investor’s risk aversion (<span class="math inline">\(\gamma\)</span>), optimizing for the tradeoff
+between expected returns and risk: <span class="math display">\[
+U = \mathbb{E}[R_p] - \frac{\gamma}{2} \sigma_p^2
+\]</span></li>
+<li>Investors with higher risk aversion prioritize minimizing
+volatility, while those with lower risk aversion seek higher
+returns.</li>
+</ul></li>
+<li><p><strong>Minimum Variance Portfolios</strong>:</p>
+<ul>
+<li>Focuses solely on minimizing risk (<span class="math inline">\(\sigma_p^2\)</span>) without considering expected
+returns.</li>
+<li>Useful for highly risk-averse investors or in environments with high
+return uncertainty.</li>
+</ul></li>
+<li><p><strong>Other Custom Objectives</strong>:</p>
+<ul>
+<li>ESG or thematic constraints (e.g., carbon footprint
+minimization).</li>
+<li>Tail risk measures like Value at Risk (VaR) or Conditional VaR
+(CVaR).</li>
+</ul></li>
+</ol>
+</div>
+<div id="the-benchmark-the-equally-weighted-portfolio" class="section level4">
+<h4><strong>The Benchmark: The Equally Weighted Portfolio</strong></h4>
+<p>One of the toughest benchmarks to beat in practice is the
+<strong>equally weighted portfolio (EWP)</strong>, where each asset is
+assigned the same weight. Despite its simplicity, the EWP has several
+attractive properties:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Diversification</strong>:</p>
+<ul>
+<li>Equal weights ensure no single asset dominates the portfolio,
+reducing concentration risk.</li>
+</ul></li>
+<li><p><strong>Robustness</strong>:</p>
+<ul>
+<li>Unlike optimized portfolios, the EWP does not rely on noisy
+estimates of returns or covariances, making it less prone to estimation
+errors.</li>
+</ul></li>
+<li><p><strong>Simplicity</strong>:</p>
+<ul>
+<li>The EWP is easy to implement and interpret, making it an appealing
+benchmark for investors and researchers alike.</li>
+</ul></li>
+</ol>
+<p>Beating the EWP consistently is challenging because it implicitly
+harnesses the benefits of diversification while avoiding estimation
+risk. Any optimization approach must demonstrate clear and consistent
+advantages over this deceptively simple benchmark.</p>
+</div>
+<div id="balancing-risk-and-return-in-practice" class="section level4">
+<h4><strong>Balancing Risk and Return in Practice</strong></h4>
+<p>Balancing risk and return is inherently difficult due to:</p>
+<ul>
+<li><strong>Uncertainty in Inputs</strong>: Estimates of asset returns,
+volatilities, and correlations are often noisy and unstable.</li>
+<li><strong>Dynamic Market Conditions</strong>: Asset behavior changes
+over time, requiring adaptive models.</li>
+<li><strong>Practical Constraints</strong>: Real-world portfolios must
+account for turnover costs, leverage limits, and regulatory
+requirements, which complicate the optimization process.</li>
+</ul>
+<p>Standalone portfolio optimization seeks to address these challenges
+by directly optimizing portfolio weights to align with investor
+objectives, subject to constraints that reflect real-world
+considerations.</p>
+</div>
+<div id="outline-of-the-following-sections" class="section level4">
+<h4><strong>Outline of the Following Sections</strong></h4>
+<p>In the subsequent sections, we will:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Specify Various Optimization Setups</strong>:</p>
+<ul>
+<li>Define different objective functions and constraints, such as
+turnover limits, leverage constraints, and weight bounds.</li>
+<li>Discuss their theoretical motivations and practical
+implications.</li>
+</ul></li>
+<li><p><strong>Elaborate on Their Benefits</strong>:</p>
+<ul>
+<li>Highlight the advantages of each setup, such as stability,
+efficiency, or adaptability to specific investment goals.</li>
+</ul></li>
+<li><p><strong>Evaluate the Produced Weights</strong>:</p>
+<ul>
+<li>Assess how well the optimized weights align with the intended
+objectives.</li>
+<li>Analyze the resulting portfolios’ diversification and risk
+characteristics.</li>
+</ul></li>
+<li><p><strong>Evaluate Portfolio Performance</strong>:</p>
+<ul>
+<li>Compare the performance of optimized portfolios against benchmarks
+like the EWP.</li>
+<li>Use metrics such as the Sharpe ratio, turnover, active share, and
+drawdown to provide a comprehensive evaluation.</li>
+</ul></li>
+</ol>
+<p>Standalone portfolio optimization provides a unique and powerful
+approach to portfolio construction, offering significant advantages over
+traditional methods. By directly targeting portfolio-level objectives,
+this method enables investors to navigate the complexities of risk and
+return more effectively.</p>
+<p>Portfolio optimization without constraints often leads to unrealistic
+allocations, such as extreme leverage or high concentration in specific
+assets. In this section, we:</p>
+<ol style="list-style-type: decimal">
+<li>Configure a simple Keras model to optimize portfolio weights without
+constraints.</li>
+<li>Backtest the portfolio and evaluate its performance using
+<code>summary.performance</code> and
+<code>summary.performance2</code>.</li>
+<li>Use <code>summary.weights</code> to highlight unreasonable weight
+distributions.</li>
+<li>Apply postprocessing to enforce practical constraints and reassess
+performance.</li>
+</ol>
+<hr />
+</div>
+<div id="unconstrained-optimization" class="section level2">
+<h2>Unconstrained optimization</h2>
+<p>We begin by setting up a incorrectly specified model, which will be
+used to optimize the portfolio weights. This model will not enforce any
+constraints, leading to unrealistic allocations (not entirely, as the
+used output activation will enforce weights between 0 and 1). More
+specifically, we define a set of portfolio constraints for
+backtesting:</p>
+<ul>
+<li><strong>Long-Only</strong>: No short-selling; weights must be
+non-negative.</li>
+<li><strong>Weight Constraints</strong>: Individual weights must not
+exceed 10%.</li>
+<li><strong>Leverage Limit</strong>: Total exposure is capped at 1.0
+(fully invested).</li>
+<li><strong>Diversification Penalty</strong>: Avoid over-concentration
+in a few assets.</li>
+</ul>
+<p>These constraints will be applied in later sections, but here we
+start with an unconstrained optimization.</p>
+<div id="model-configuration" class="section level4">
+<h4>Model Configuration</h4>
+<p>We start with a simple Keras model with:</p>
+<ul>
+<li>Three dense layers (32, 16, and 1 unit respectively).</li>
+<li><em>eLU</em> activation for hidden layers and <em>tanh</em>
+activation for the output layer (tanh is bounded between -1 and 1, which
+we will include, rather than the sigmoid function, for educational
+purposes).</li>
+<li>Loss function: <code>sharpe_ratio_loss</code> (no penalties
+applied).</li>
+<li>Adam optimizer with a learning rate of 0.001.<br />
+</li>
+<li>50 training epochs (for output reasons, the batch size is
+automatically set to be the entire training dataset, hence we need a
+number of epochs to achieve convergence).</li>
+<li>for reproducibility, we set the random seed to 42 (the answer to
+everything).</li>
+</ul>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="co"># Define a simple Keras model configuration</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>config_keras_simple <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">layers =</span> <span class="fu">list</span>(</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span><span class="dv">32</span>, <span class="at">activation =</span> <span class="st">&quot;elu&quot;</span>),</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span> <span class="dv">16</span>, <span class="at">activation =</span> <span class="st">&quot;elu&quot;</span>),</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span> <span class="dv">1</span>, <span class="at">activation =</span> <span class="st">&quot;tanh&quot;</span>)  <span class="co"># Simple tanh activation bounded between -1 and 1</span></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>  ),</span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>  <span class="at">loss =</span> <span class="fu">list</span>(</span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">&quot;sharpe_ratio_loss&quot;</span>,  <span class="co"># Standard Sharpe Ratio loss with no penalties</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>    <span class="at">transaction_costs =</span> <span class="dv">0</span>,  <span class="co"># 5 basis points transaction costs</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>    <span class="at">delta =</span> <span class="dv">0</span>,  <span class="co"># Tolerance level for optimal Sharpe Ratio</span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a>    <span class="at">lambda =</span> <span class="dv">0</span>,  <span class="co"># Diversification penalty</span></span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>    <span class="at">leverage =</span> <span class="dv">0</span>,  <span class="co"># Leverage limit</span></span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a>    <span class="at">eta =</span> <span class="dv">0</span>  <span class="co"># Leverage penalty</span></span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a>  ),</span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a>  <span class="at">optimizer =</span> <span class="fu">list</span>(<span class="at">name =</span> <span class="st">&quot;optimizer_adam&quot;</span>, <span class="at">learning_rate =</span> <span class="fl">0.001</span>),</span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>  <span class="at">epochs =</span> <span class="dv">50</span>,</span>
+<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>  <span class="at">verbose =</span> <span class="dv">0</span>,</span>
+<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a>  <span class="at">seeds =</span> <span class="fu">c</span>(<span class="dv">42</span>)  <span class="co"># Set random seed for reproducibility</span></span>
+<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="backtesting-the-unconstrained-portfolio" class="section level3">
+<h3>Backtesting the Unconstrained Portfolio</h3>
+<p>We backtest the portfolio using the unconstrained model. This
+involves:</p>
+<ul>
+<li>Training the model on a rolling 5 year window of historical
+data.</li>
+<li>Predicting portfolio weights for one year into the future.</li>
+<li>Including a one-month offset between training and prediction data to
+prevent data leakage.</li>
+</ul>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co"># Define the portfolio configuration for all subsequent backtests</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>return_label <span class="ot">&lt;-</span> <span class="st">&quot;R1M_Usd&quot;</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>features <span class="ot">&lt;-</span> <span class="fu">colnames</span>(data_ml_red)[<span class="dv">4</span><span class="sc">:</span><span class="dv">95</span>]</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>rolling <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>window_size <span class="ot">&lt;-</span> <span class="st">&quot;5 years&quot;</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>step_size <span class="ot">&lt;-</span> <span class="st">&quot;1 year&quot;</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>offset <span class="ot">&lt;-</span> <span class="st">&quot;1 month&quot;</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>in_sample <span class="ot">&lt;-</span> <span class="cn">TRUE</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>num_cores <span class="ot">&lt;-</span> <span class="dv">12</span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a>verbose <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span></code></pre></div>
+<p>Now we run the backtest:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co"># Run the backtest</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>portfolios_raw_unconstrained <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">features =</span> features,</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_simple =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>,<span class="at">config1 =</span> config_keras_simple)),</span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>  <span class="at">in_sample =</span> in_sample, </span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a>)</span></code></pre></div>
+<div id="result-analysis" class="section level4">
+<h4>Result Analysis</h4>
+<p>Unconstrained optimization often results in extreme weights. We use
+<code>summary.weights</code> to demonstrate this issue.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co"># Summarize portfolio weights</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(portfolios_raw_unconstrained, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table style="width:100%;">
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="11%" />
+<col width="9%" />
+<col width="7%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="9%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">-0.9517/0.9914</td>
+<td align="center">0.1161 (0.477)</td>
+<td align="center">0.4374 (0.0732)</td>
+<td align="center">89.6652 (36.654)</td>
+<td align="center">0.012</td>
+<td align="center">155.9253 (34.033)</td>
+<td align="center">9.3429 (1.5413)</td>
+<td align="center">157.651 (45.2936)</td>
+<td align="center">31.0624</td>
+<td align="center">5963.988</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary reveals:</p>
+<ul>
+<li>Large weight differences (Min/Max: -0.9517/0.9914, indicating
+extreme allocations, the timeseries average weight standard deviation
+(and its timeseries standard deviation) per date is 0.4374
+(0.0732).</li>
+<li>Large total turnover at 5963.9883, indicating that throughout the
+backtest, the portfolio was completely turned over 5964 times.</li>
+<li>Concentration in a few assets, leading to poor diversification,
+based on the average Herfindahl-Hirschman Index (HHI) of 89.6652
+(36.654).</li>
+</ul>
+<p>We can evaluate the portfolio’s performance using the
+<code>summary.performance</code> and/or
+<code>summary.performance2</code> functions. These provide insights into
+key metrics like Sharpe Ratio, turnover, and diversification.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="co"># Summarize portfolio performance</span></span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(portfolios_raw_unconstrained, <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">3</span>, <span class="at">test=</span><span class="cn">TRUE</span>, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table style="width:100%;">
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="17%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="8%" />
+<col width="14%" />
+<col width="14%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">11.9614***</td>
+<td align="center">0.8787</td>
+<td align="center">77.8873</td>
+<td align="center">5963.9883</td>
+<td align="center">0.7435</td>
+<td align="center">0.0729***</td>
+<td align="center">-266.0084</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.1533</td>
+<td align="center">0.7955</td>
+<td align="center">0.0000</td>
+<td align="center">16.4426</td>
+<td align="center">0.769</td>
+<td align="center">NaN</td>
+<td align="center">0.0976</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: Performance-wise we observe the
+following:</p>
+<ul>
+<li>The Sharpe Ratio is high at 0.8787, whereas the one of the equally
+weighted portfolios is 0.7955.</li>
+<li>The turnover, however, is very high at 5964, indicating excessive
+trading activity relative to the equally weighted benchmark at 16</li>
+<li>Taking into account transaction cost at 0.005 (5 basis points), this
+leads to a turnover-adjusted Sharpe Ratio of 0.7435, which is still
+above the equally weighted benchmark at 0.769.</li>
+<li>Due to the significantly larger annualized return of 11.9614***
+compared to the benchmark at 0.1533, the certainty equivalent return is
+very negative at all levels of risk aversion (-266.0084), compared to
+the benchmark at 0.0976.</li>
+</ul>
+<p>While the Sharpe Ratio may appear high, other metrics like turnover
+and diversification are very sub-optimal, making the portfolio
+impractical for real-world use.</p>
+</div>
+<div id="postprocessing-the-portfolio" class="section level4">
+<h4>Postprocessing the Portfolio</h4>
+<p>We could try post-optimization enforcement of constraints to improve
+the portfolio’s practicality. Here, we apply a postprocessing
+configuration to enforce constraints on the portfolio weights:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="co"># Define postprocessing configuration</span></span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>pp_config <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">operation =</span> <span class="st">&quot;set_weightsum&quot;</span>, </span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>       <span class="at">min_weight =</span> <span class="dv">0</span>, <span class="at">max_weight =</span> <span class="fl">0.1</span>, <span class="co"># box constraint on individual assets</span></span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>       <span class="at">min_sum =</span> <span class="fl">0.8</span>, <span class="at">max_sum=</span><span class="fl">1.5</span>, <span class="co"># we do not yet include a full-investm,ent constraint without leverage</span></span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>       <span class="at">allow_short_sale =</span> <span class="cn">FALSE</span>))</span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a><span class="co"># Apply postprocessing</span></span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>portfolios_postprocessed <span class="ot">&lt;-</span> <span class="fu">postprocessing_portfolios</span>(portfolios_raw_unconstrained, pp_config)</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" tabindex="-1"></a><span class="co"># Summarize postprocessed weights</span></span>
+<span id="cb18-12"><a href="#cb18-12" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(portfolios_postprocessed, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table style="width:100%;">
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="12%" />
+<col width="9%" />
+<col width="8%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="7%" />
+<col width="8%" />
+<col width="13%" />
+<col width="9%" />
+<col width="8%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0/0.0102</td>
+<td align="center">0.004 (0.0038)</td>
+<td align="center">0.0036 (0.001)</td>
+<td align="center">0.0113 (0.0019)</td>
+<td align="center">91.8045</td>
+<td align="center">1.5 (0)</td>
+<td align="center">0.1059 (0.0095)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2892</td>
+<td align="center">55.5298</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The postprocessing step enforces
+constraints on the portfolio weights, leading to:</p>
+<ul>
+<li>Somehow improved weights, which are now between in the interval
+0/0.0102.</li>
+<li>The total turnover is reduced to 55.5298, indicating a more stable
+portfolio.</li>
+<li>The average Herfindahl-Hirschman Index (HHI) is now 0.0113 (0.0019),
+reflecting much better diversification.</li>
+</ul>
+<p>Potentially this will make the portfolio be very close to the equally
+weighted portfolio, but with a slightly higher Sharpe Ratio.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="co"># Evaluate performance after postprocessing</span></span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(portfolios_postprocessed, <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">5</span>, <span class="at">test=</span><span class="cn">TRUE</span>, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="18%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="7%" />
+<col width="15%" />
+<col width="14%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=5)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0.291**</td>
+<td align="center">0.8973**</td>
+<td align="center">0.6848</td>
+<td align="center">55.5298</td>
+<td align="center">0.845</td>
+<td align="center">0.0818***</td>
+<td align="center">0.0280</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.1533</td>
+<td align="center">0.7955</td>
+<td align="center">0.0000</td>
+<td align="center">16.4426</td>
+<td align="center">0.769</td>
+<td align="center">NaN</td>
+<td align="center">0.0604</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The postprocessed portfolio shows:</p>
+<ul>
+<li>A much better Sharpe ratio, significantly exceeding the equally
+weighted portfolio at 0.8973** vs. 0.7955.</li>
+<li>This even holds when applying transaction cost (0.845 vs. 0.769),
+due to a much decreased turnover of 56.</li>
+<li>The certainty equivalent return is now positive at the given risk
+level, indicating a more stable and practical portfolio.</li>
+</ul>
+</div>
+<div id="results-and-insights" class="section level4">
+<h4>Results and Insights</h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Before Postprocessing</strong>:</p>
+<ul>
+<li>The unconstrained portfolio exhibited extreme weights, high
+turnover, and poor diversification.</li>
+<li>While achieving a high Sharpe Ratio, the portfolio’s impracticality
+limits its usefulness.</li>
+</ul></li>
+<li><p><strong>After Postprocessing</strong>:</p>
+<ul>
+<li>Weight distributions improved significantly, adhering to realistic
+constraints.</li>
+<li>Diversification and turnover metrics became more acceptable, making
+the portfolio closer to being usable for real-world implementation.</li>
+</ul></li>
+</ol>
+</div>
+</div>
+</div>
+<div id="backtesting-the-weight-constrained-portfolio" class="section level2">
+<h2>Backtesting the Weight-constrained portfolio</h2>
+<p>Activation functions in the <strong>InvestigatoR</strong> package
+allow users to impose practical constraints on portfolio weights.
+Therefore, we can enforce constraints like non-negativity, bounded
+weights, and smooth transitions using activation functions like
+<code>activation_box_sigmoid</code> and
+<code>activation_box_tanh</code>.</p>
+<p>The <strong><code>activation_box_sigmoid</code></strong> ensures:</p>
+<ul>
+<li>Non-negative weights (long-only).</li>
+<li>Bounded weights, e.g., within [0, 0.1].</li>
+<li>Smooth transitions at the boundaries to avoid discontinuities.</li>
+</ul>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="co"># Configuration with long-only activation</span></span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a>config_box_sigmoid <span class="ot">&lt;-</span> config_keras_simple</span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a>config_box_sigmoid<span class="sc">$</span>layers[[<span class="dv">3</span>]]<span class="sc">$</span>activation <span class="ot">&lt;-</span> <span class="fu">activation_box_sigmoid</span>(<span class="at">min_weight =</span> <span class="dv">0</span>, <span class="at">max_weight =</span> <span class="fl">0.1</span>)</span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="co"># Backtest with box-sigmoid activation</span></span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a>portfolios_box_sigmoid <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb20-10"><a href="#cb20-10" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_box_sigmoid=</span><span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>,<span class="at">config1 =</span> config_box_sigmoid)),</span>
+<span id="cb20-11"><a href="#cb20-11" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb20-12"><a href="#cb20-12" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb20-13"><a href="#cb20-13" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb20-14"><a href="#cb20-14" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb20-15"><a href="#cb20-15" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb20-16"><a href="#cb20-16" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb20-17"><a href="#cb20-17" tabindex="-1"></a>)</span></code></pre></div>
+<div id="result-analysis-1" class="section level4">
+<h4>Result Analysis</h4>
+<p>To compare the results with the constrained cases, we use the
+<strong><code>combine_portfolios</code></strong> function to aggregate
+the portfolios.</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="co"># Combine portfolios for comparison</span></span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a>combined_portfolios <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a>  portfolios_postprocessed,</span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a>  portfolios_box_sigmoid,</span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_box_sigmoid, pp_config)</span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a>))</span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a></span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co"># Summarize combined weights</span></span>
+<span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(combined_portfolios, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="13%" />
+<col width="9%" />
+<col width="8%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="8%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0/0.0102</td>
+<td align="center">0.004 (0.0038)</td>
+<td align="center">0.0036 (0.001)</td>
+<td align="center">0.0113 (0.0019)</td>
+<td align="center">91.8045</td>
+<td align="center">1.5 (0)</td>
+<td align="center">0.1059 (0.0095)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2892</td>
+<td align="center">55.5298</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_box_sigmoid_2</td>
+<td align="center">0/0.0684</td>
+<td align="center">0.0016 (0.0043)</td>
+<td align="center">0.0038 (0.0017)</td>
+<td align="center">0.0077 (0.0064)</td>
+<td align="center">492.3355</td>
+<td align="center">0.5942 (0.4039)</td>
+<td align="center">0.0797 (0.0366)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.1599</td>
+<td align="center">30.7079</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_box_sigmoid_3</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0071)</td>
+<td align="center">0.0068 (0.0021)</td>
+<td align="center">0.0209 (0.0102)</td>
+<td align="center">65.1258</td>
+<td align="center">0.8755 (0.1718)</td>
+<td align="center">0.1396 (0.0371)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2426</td>
+<td align="center">46.5831</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>The <code>activation_box_sigmoid</code> function naturally enforces
+bounded weights, leading to more realistic allocations. The min/max
+weights are now 0/0.0684 (and 0/0.1 after postprocessing).</li>
+<li>The average weight standard deviation per date is 0.0038 (0.0017),
+indicating a very stable distribution.</li>
+<li>The average Herfindahl-Hirschman Index (HHI) is now very low at
+0.0077 (0.0064) (and 0.0209 (0.0102) after postprocessing), reflecting
+excellent diversification that is slightly scaled up after
+postprocessing.</li>
+<li>The total turnover is significantly reduced to 30.7079 (and 46.5831
+after postprocessing).</li>
+</ul>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="co"># Summarize combined performance</span></span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a>tt<span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(combined_portfolios, <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">3</span>, <span class="at">test=</span><span class="cn">TRUE</span>, <span class="at">print=</span><span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="21%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="7%" />
+<col width="14%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0.291**</td>
+<td align="center">0.8973**</td>
+<td align="center">0.6848</td>
+<td align="center">55.5298</td>
+<td align="center">0.845</td>
+<td align="center">0.0818***</td>
+<td align="center">0.1332</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_box_sigmoid_2</td>
+<td align="center">0.1641</td>
+<td align="center">1.2357**</td>
+<td align="center">0.5310</td>
+<td align="center">30.7079</td>
+<td align="center">1.1697**</td>
+<td align="center">0.0065</td>
+<td align="center">0.1376</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_box_sigmoid_3</td>
+<td align="center">0.2459**</td>
+<td align="center">1.2137***</td>
+<td align="center">0.6188</td>
+<td align="center">46.5831</td>
+<td align="center">1.1451***</td>
+<td align="center">0.0726***</td>
+<td align="center">0.1843</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.1533</td>
+<td align="center">0.7955</td>
+<td align="center">0.0000</td>
+<td align="center">16.4426</td>
+<td align="center">0.769</td>
+<td align="center">NaN</td>
+<td align="center">0.0976</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The performance summary reveals:</p>
+<ul>
+<li>The annualized Sharpe Ratio of the postprocessed portfolio is
+1.2137*<strong>, significantly exceeding the equally weighted benchmark
+at 0.7955 and also exceeding the one of the (postprocessed)
+unconstrained optimization at 0.8973</strong>.</li>
+<li>Due to the much smaller overall turnover, the turnover-adjusted
+Sharpe Ratio of the postprocessed portfolio is 1.1451***, the highest
+among all of those portfolios tested so far!</li>
+</ul>
+</div>
+<div id="results-and-insights-1" class="section level4">
+<h4>Results and Insights</h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Constrained Portfolio Optimization</strong>:</p>
+<ul>
+<li>The <code>activation_box_sigmoid</code> function enforces practical
+constraints on portfolio weights.</li>
+<li>Improved diversification and reduced turnover compared to
+unconstrained portfolios.</li>
+</ul></li>
+<li><p><strong>Performance Metrics</strong>:</p>
+<ul>
+<li>The constrained portfolio exhibits a higher Sharpe Ratio and lower
+turnover, indicating better risk-return characteristics.</li>
+<li>The portfolio outperforms the equally weighted benchmark and the
+unconstrained portfolio, especially after postprocessing.</li>
+</ul></li>
+</ol>
+<p>These results highlight the importance of activation functions in
+creating portfolios that adhere to practical constraints while
+maintaining robust performance. In the next section, we will penalize
+the loss function with various parameters and observe their impact.</p>
+</div>
+</div>
+<div id="constraining-sharpe_ratio_loss" class="section level2">
+<h2>Constraining <code>sharpe_ratio_loss</code></h2>
+<p>Portfolio optimization often requires balancing return and risk while
+adhering to practical constraints. The <code>sharpe_ratio_loss</code>
+function in the <strong>InvestigatoR</strong> package provides the
+flexibility to incorporate various penalties, enabling portfolios to
+reflect real-world requirements.</p>
+<div id="key-parameters-in-sharpe_ratio_loss" class="section level4">
+<h4>Key Parameters in <code>sharpe_ratio_loss</code></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Transaction Costs
+(<code>transaction_costs</code>)</strong>:</p>
+<ul>
+<li>Penalizes frequent trading by incorporating proportional costs for
+portfolio turnover.</li>
+<li>Higher values discourage frequent rebalancing and reduce costs.</li>
+</ul></li>
+<li><p><strong>Diversification Penalty (<code>delta</code> and
+<code>lambda</code>)</strong>:</p>
+<ul>
+<li>Encourages broader distribution of portfolio weights, reducing
+over-concentration in a few assets.</li>
+<li>Higher values lead to more evenly spread weights.</li>
+<li>Target value set at <code>delta</code>.</li>
+</ul></li>
+<li><p><strong>Leverage Constraint (<code>leverage</code> and
+<code>eta</code>)</strong>:</p>
+<ul>
+<li>Encourages balanced exposure by limiting total portfolio
+leverage.</li>
+<li>Higher values of <code>eta</code> restrict leverage, reducing risk
+and instability.</li>
+<li>Target value set at <code>leverage</code>.</li>
+</ul></li>
+</ol>
+</div>
+<div id="optimization-goals" class="section level4">
+<h4>Optimization Goals</h4>
+<p>By adjusting these parameters, <code>sharpe_ratio_loss</code>
+balances:</p>
+<ul>
+<li>Maximizing the Sharpe Ratio.</li>
+<li>Adhering to practical constraints like turnover limits,
+diversification, and leverage caps.</li>
+</ul>
+<hr />
+</div>
+<div id="transaction-cost-penalty" class="section level3">
+<h3>Transaction Cost Penalty</h3>
+<p>Frequent portfolio rebalancing incurs costs that can erode returns.
+By setting <code>transaction_costs</code>, the loss function penalizes
+high turnover.</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a><span class="co"># Adjust transaction cost penalty in base configuration</span></span>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a>config_transaction_cost <span class="ot">&lt;-</span> config_box_sigmoid</span>
+<span id="cb23-3"><a href="#cb23-3" tabindex="-1"></a>config_transaction_cost<span class="sc">$</span>loss<span class="sc">$</span>transaction_costs <span class="ot">&lt;-</span> <span class="fl">0.005</span>  <span class="co"># Proportional cost for each transaction</span></span>
+<span id="cb23-4"><a href="#cb23-4" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" tabindex="-1"></a><span class="co"># Backtest</span></span>
+<span id="cb23-6"><a href="#cb23-6" tabindex="-1"></a>portfolios_transaction_cost <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb23-7"><a href="#cb23-7" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb23-8"><a href="#cb23-8" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb23-9"><a href="#cb23-9" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb23-10"><a href="#cb23-10" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_transaction_cost =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_transaction_cost)),</span>
+<span id="cb23-11"><a href="#cb23-11" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb23-12"><a href="#cb23-12" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb23-13"><a href="#cb23-13" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb23-14"><a href="#cb23-14" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb23-15"><a href="#cb23-15" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb23-16"><a href="#cb23-16" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb23-17"><a href="#cb23-17" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="diversification-penalty" class="section level3">
+<h3>Diversification Penalty</h3>
+<p>Over-concentration in a few assets increases risk. By applying the
+<code>lambda</code> parameter, the loss function encourages more evenly
+distributed weights.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="co"># Adjust diversification penalty in base configuration</span></span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>config_diversification <span class="ot">&lt;-</span> config_box_sigmoid</span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>config_diversification<span class="sc">$</span>loss<span class="sc">$</span>lambda <span class="ot">&lt;-</span> <span class="fl">0.5</span>  <span class="co"># Encourage even allocation</span></span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>config_diversification<span class="sc">$</span>loss<span class="sc">$</span>delta <span class="ot">&lt;-</span> <span class="fl">0.0289</span>  <span class="co"># Target value for diversification</span></span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a></span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a><span class="co"># Backtest</span></span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a>portfolios_diversification <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_diversification =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_diversification)),</span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb24-15"><a href="#cb24-15" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb24-16"><a href="#cb24-16" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb24-17"><a href="#cb24-17" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb24-18"><a href="#cb24-18" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="leverage-constraint" class="section level3">
+<h3>Leverage Constraint</h3>
+<p>Excessive leverage amplifies risk and can lead to instability. The
+<code>leverage</code> parameter limits total portfolio exposure.</p>
+<div id="configuration-and-backtesting" class="section level4">
+<h4>Configuration and Backtesting</h4>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="co"># Adjust leverage constraint in base configuration</span></span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a>config_leverage <span class="ot">&lt;-</span> config_box_sigmoid</span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a>config_leverage<span class="sc">$</span>loss<span class="sc">$</span>leverage <span class="ot">&lt;-</span> <span class="fl">0.8</span>  <span class="co"># Encourage leverage at 0.8 (not fully invested)</span></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a>config_leverage<span class="sc">$</span>loss<span class="sc">$</span>eta <span class="ot">&lt;-</span> <span class="fl">0.5</span>  <span class="co"># Leverage penalty</span></span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a></span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="co"># Backtest</span></span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a>portfolios_leverage <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_leverage =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_leverage)),</span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb25-17"><a href="#cb25-17" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb25-18"><a href="#cb25-18" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="combined-constraints" class="section level3">
+<h3>Combined Constraints</h3>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="co"># Combine all penalties in base configuration</span></span>
+<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a>config_combined <span class="ot">&lt;-</span> config_box_sigmoid</span>
+<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a>config_combined<span class="sc">$</span>loss<span class="sc">$</span>transaction_costs <span class="ot">&lt;-</span> <span class="fl">0.005</span></span>
+<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a>config_combined<span class="sc">$</span>loss<span class="sc">$</span>lambda <span class="ot">&lt;-</span> <span class="fl">0.5</span></span>
+<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a>config_combined<span class="sc">$</span>loss<span class="sc">$</span>delta <span class="ot">&lt;-</span> <span class="fl">0.0289</span></span>
+<span id="cb26-6"><a href="#cb26-6" tabindex="-1"></a>config_combined<span class="sc">$</span>loss<span class="sc">$</span>leverage <span class="ot">&lt;-</span> <span class="fl">1.0</span></span>
+<span id="cb26-7"><a href="#cb26-7" tabindex="-1"></a>config_combined<span class="sc">$</span>loss<span class="sc">$</span>eta <span class="ot">&lt;-</span> <span class="fl">0.5</span></span>
+<span id="cb26-8"><a href="#cb26-8" tabindex="-1"></a></span>
+<span id="cb26-9"><a href="#cb26-9" tabindex="-1"></a><span class="co"># Backtest</span></span>
+<span id="cb26-10"><a href="#cb26-10" tabindex="-1"></a>portfolios_combined <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb26-11"><a href="#cb26-11" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb26-12"><a href="#cb26-12" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb26-13"><a href="#cb26-13" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb26-14"><a href="#cb26-14" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_combined =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_combined)),</span>
+<span id="cb26-15"><a href="#cb26-15" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb26-16"><a href="#cb26-16" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb26-17"><a href="#cb26-17" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb26-18"><a href="#cb26-18" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb26-19"><a href="#cb26-19" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb26-20"><a href="#cb26-20" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb26-21"><a href="#cb26-21" tabindex="-1"></a>)</span></code></pre></div>
+<div id="comparative-analysis" class="section level4">
+<h4>Comparative Analysis</h4>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="co"># Combine portfolios for comparison</span></span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a>combined_portfolios2 <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>  portfolios_postprocessed,</span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a>  portfolios_box_sigmoid,</span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_box_sigmoid, pp_config),</span>
+<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a>  portfolios_transaction_cost,</span>
+<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_transaction_cost, pp_config),</span>
+<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a>  portfolios_diversification,</span>
+<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_diversification, pp_config),</span>
+<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a>  portfolios_leverage,</span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_leverage, pp_config),</span>
+<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a>  portfolios_combined,</span>
+<span id="cb27-13"><a href="#cb27-13" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_combined, pp_config)</span>
+<span id="cb27-14"><a href="#cb27-14" tabindex="-1"></a>))</span>
+<span id="cb27-15"><a href="#cb27-15" tabindex="-1"></a></span>
+<span id="cb27-16"><a href="#cb27-16" tabindex="-1"></a><span class="co"># Summarize combined weights</span></span>
+<span id="cb27-17"><a href="#cb27-17" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(<span class="fu">postprocessing_portfolios</span>(combined_portfolios2, pp_config), <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="15%" />
+<col width="8%" />
+<col width="7%" />
+<col width="9%" />
+<col width="7%" />
+<col width="5%" />
+<col width="7%" />
+<col width="7%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0/0.0102</td>
+<td align="center">0.004 (0.0038)</td>
+<td align="center">0.0036 (0.001)</td>
+<td align="center">0.0113 (0.0019)</td>
+<td align="center">91.8045</td>
+<td align="center">1.5 (0)</td>
+<td align="center">0.1059 (0.0095)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2892</td>
+<td align="center">55.5298</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_box_sigmoid_2</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0071)</td>
+<td align="center">0.0068 (0.0021)</td>
+<td align="center">0.0209 (0.0102)</td>
+<td align="center">65.1258</td>
+<td align="center">0.8755 (0.1718)</td>
+<td align="center">0.1396 (0.0371)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2426</td>
+<td align="center">46.5831</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_box_sigmoid_3</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0072)</td>
+<td align="center">0.0069 (0.0022)</td>
+<td align="center">0.0216 (0.011)</td>
+<td align="center">64.3246</td>
+<td align="center">0.8898 (0.1606)</td>
+<td align="center">0.1417 (0.0392)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2453</td>
+<td align="center">47.1048</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_transaction_cost_4</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0031 (0.0062)</td>
+<td align="center">0.0059 (0.0017)</td>
+<td align="center">0.0178 (0.0067)</td>
+<td align="center">66.1526</td>
+<td align="center">1.1432 (0.3505)</td>
+<td align="center">0.1311 (0.0252)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2362</td>
+<td align="center">45.3445</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_transaction_cost_5</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0031 (0.0062)</td>
+<td align="center">0.0059 (0.0018)</td>
+<td align="center">0.0181 (0.0072)</td>
+<td align="center">65.9436</td>
+<td align="center">1.1469 (0.3464)</td>
+<td align="center">0.1318 (0.0265)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2367</td>
+<td align="center">45.4369</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_diversification_6</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0067)</td>
+<td align="center">0.0065 (0.0017)</td>
+<td align="center">0.019 (0.0082)</td>
+<td align="center">66.0064</td>
+<td align="center">0.906 (0.1797)</td>
+<td align="center">0.1345 (0.0309)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2428</td>
+<td align="center">46.6130</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_diversification_7</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0068)</td>
+<td align="center">0.0065 (0.0018)</td>
+<td align="center">0.0193 (0.0085)</td>
+<td align="center">65.7359</td>
+<td align="center">0.9108 (0.176)</td>
+<td align="center">0.1352 (0.0317)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2435</td>
+<td align="center">46.7467</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_leverage_8</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0071)</td>
+<td align="center">0.0068 (0.0021)</td>
+<td align="center">0.0209 (0.0102)</td>
+<td align="center">65.1258</td>
+<td align="center">0.8755 (0.1718)</td>
+<td align="center">0.1396 (0.0371)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2426</td>
+<td align="center">46.5831</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_leverage_9</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0024 (0.0072)</td>
+<td align="center">0.0069 (0.0022)</td>
+<td align="center">0.0216 (0.011)</td>
+<td align="center">64.3246</td>
+<td align="center">0.8898 (0.1606)</td>
+<td align="center">0.1417 (0.0392)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2453</td>
+<td align="center">47.1048</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_combined0_10</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0032 (0.006)</td>
+<td align="center">0.0057 (0.0016)</td>
+<td align="center">0.0174 (0.0065)</td>
+<td align="center">67.1589</td>
+<td align="center">1.1997 (0.3231)</td>
+<td align="center">0.1295 (0.0245)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2444</td>
+<td align="center">46.9214</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_combined1_11</td>
+<td align="center">0/0.1</td>
+<td align="center">0.0032 (0.006)</td>
+<td align="center">0.0058 (0.0016)</td>
+<td align="center">0.0174 (0.0066)</td>
+<td align="center">67.1112</td>
+<td align="center">1.2004 (0.3221)</td>
+<td align="center">0.1297 (0.0247)</td>
+<td align="center">0 (0)</td>
+<td align="center">0.2444</td>
+<td align="center">46.9280</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>Most constrained portfolios show similar levels of diversification
+and turnover.</li>
+<li>It is hard from this analysis to see the impact of the leverage
+constraint, as the leverage is already at 1.0 for the unconstrained
+portfolios.</li>
+</ul>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="co"># Summarize combined performance</span></span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(<span class="fu">postprocessing_portfolios</span>(combined_portfolios2, pp_config), <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="23%" />
+<col width="11%" />
+<col width="9%" />
+<col width="9%" />
+<col width="6%" />
+<col width="13%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_simple_1</td>
+<td align="center">0.291**</td>
+<td align="center">0.8973**</td>
+<td align="center">0.6848</td>
+<td align="center">55.5298</td>
+<td align="center">0.8868**</td>
+<td align="center">0.0818***</td>
+<td align="center">0.1332</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_box_sigmoid_2</td>
+<td align="center">0.2459**</td>
+<td align="center">1.2137***</td>
+<td align="center">0.6188</td>
+<td align="center">46.5831</td>
+<td align="center">1.2***</td>
+<td align="center">0.0726***</td>
+<td align="center">0.1843</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_box_sigmoid_3</td>
+<td align="center">0.2534**</td>
+<td align="center">1.2246***</td>
+<td align="center">0.6239</td>
+<td align="center">47.1048</td>
+<td align="center">1.211***</td>
+<td align="center">0.0778***</td>
+<td align="center">0.1891</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_transaction_cost_4</td>
+<td align="center">0.2844***</td>
+<td align="center">1.2724***</td>
+<td align="center">0.5945</td>
+<td align="center">45.3445</td>
+<td align="center">1.2601***</td>
+<td align="center">0.1022***</td>
+<td align="center">0.2095</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_transaction_cost_5</td>
+<td align="center">0.2857***</td>
+<td align="center">1.2767***</td>
+<td align="center">0.5958</td>
+<td align="center">45.4369</td>
+<td align="center">1.2644***</td>
+<td align="center">0.1031***</td>
+<td align="center">0.2106</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_diversification_6</td>
+<td align="center">0.2525**</td>
+<td align="center">1.2325***</td>
+<td align="center">0.6083</td>
+<td align="center">46.6130</td>
+<td align="center">1.219***</td>
+<td align="center">0.0823***</td>
+<td align="center">0.1895</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_diversification_7</td>
+<td align="center">0.2551**</td>
+<td align="center">1.2394***</td>
+<td align="center">0.6099</td>
+<td align="center">46.7467</td>
+<td align="center">1.226***</td>
+<td align="center">0.0844***</td>
+<td align="center">0.1915</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_leverage_8</td>
+<td align="center">0.2459**</td>
+<td align="center">1.2137***</td>
+<td align="center">0.6188</td>
+<td align="center">46.5831</td>
+<td align="center">1.2***</td>
+<td align="center">0.0726***</td>
+<td align="center">0.1843</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_leverage_9</td>
+<td align="center">0.2534**</td>
+<td align="center">1.2246***</td>
+<td align="center">0.6239</td>
+<td align="center">47.1048</td>
+<td align="center">1.211***</td>
+<td align="center">0.0778***</td>
+<td align="center">0.1891</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_combined0_10</td>
+<td align="center">0.3036***</td>
+<td align="center">1.2493***</td>
+<td align="center">0.5946</td>
+<td align="center">46.9214</td>
+<td align="center">1.2376***</td>
+<td align="center">0.1074***</td>
+<td align="center">0.2150</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_combined1_11</td>
+<td align="center">0.3039***</td>
+<td align="center">1.2504***</td>
+<td align="center">0.5948</td>
+<td align="center">46.9280</td>
+<td align="center">1.2388***</td>
+<td align="center">0.1077***</td>
+<td align="center">0.2153</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.1533</td>
+<td align="center">0.7955</td>
+<td align="center">0.0000</td>
+<td align="center">16.4426</td>
+<td align="center">0.7902</td>
+<td align="center">NaN</td>
+<td align="center">0.0976</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The performance summary reveals:</p>
+<ul>
+<li>All constrained portfolios exhibit Sharpe ratios (out-of-sample and
+annualized) significantly above 1, even when taking transaction costs
+properly into account. All cases therefore outperform the equally
+weighted portfolio.</li>
+<li>The portfolios with the highest turnover-adjusted Sharpe ratios are
+the combined constraints and the transaction cost constrained
+portfolios, with the highest Sharpe ratios being shown for the latter
+portfolios.</li>
+<li>Postprocessing has no impact on the combined portfolio, as all
+features of this portfolio already perfectly adhere to the
+constraints.</li>
+</ul>
+</div>
+</div>
+<div id="conclusion" class="section level3">
+<h3>Conclusion</h3>
+<p>In the entire exercise we have learned how to use keras to predict
+and backtest portfolio weights, that - even taking into account data
+leakage and avoiding too frequent reestimation - significantly
+outperform the equally weighted benchmnark. We have also seen how to
+enforce practical constraints on the portfolio weights, leading to more
+realistic allocations and better performance. The most significant
+improvements were achieved by penalizing the loss function with
+transaction costs, leading to the overall highest Sharpe ratio (by a
+samll margin).</p>
+<p>In the following we will have a look at benchmark portfolios.</p>
+<hr />
+</div>
+</div>
+</div>
+<div id="benchmark-based-portfolio-optimization" class="section level1">
+<h1>Benchmark-Based Portfolio Optimization</h1>
+<p>Now we come to the even more difficult case of tilting a benchmark in
+order to outperform it. Many portfolio strategies aim to outperform a
+benchmark, the <strong>InvestigatoR</strong> package provides tools to
+achieve this:</p>
+<ol style="list-style-type: decimal">
+<li>Loss functions like <code>sharpe_ratio_difference_loss</code> and
+<code>information_ratio_loss_active_returns</code>.</li>
+<li>Customizable activation functions to enforce constraints, including
+weight changes relative to the benchmark.</li>
+</ol>
+<p>This section demonstrates:</p>
+<ol style="list-style-type: decimal">
+<li>Starting with an unconstrained benchmark case.</li>
+<li>Introducing activation functions for benchmark-relative
+weights.</li>
+<li>Analyzing the impact of L1 and L2 penalties.</li>
+</ol>
+<p>We begin by setting up a model, which will be used to optimize the
+portfolio tilts (delta_weights). This model will not enforce any
+constraints, leading to unrealistic allocations (not entirely, as the
+used output activation will enforce weights between -1 and 1). More
+specifically, we define a set of portfolio constraints for
+backtesting:</p>
+<ul>
+<li><strong>Long-Short</strong>: Explicit short-selling; tilting
+portfolio must be self-financing.</li>
+<li><strong>Weight Constraints</strong>: Individual weights must be
+smaller than 10% in absolute value.</li>
+<li><strong>Leverage Limit</strong>: Total exposure is capped at 1.0 on
+both sides (negative weights and positive weights).</li>
+</ul>
+<div id="basic-setup-based-on-increasing-sharpe-ratio-vis-a-vis-the-benchmark" class="section level3">
+<h3>Basic setup (based on increasing Sharpe ratio vis-a-vis the
+benchmark)</h3>
+<div id="benchmark-definition-and-data-setup" class="section level4">
+<h4>Benchmark Definition and Data Setup</h4>
+<p>We begin by adding a value-weighted benchmark to the dataset
+<code>data_ml_red</code>.</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" tabindex="-1"></a><span class="co"># Add benchmark to dataset</span></span>
+<span id="cb29-2"><a href="#cb29-2" tabindex="-1"></a>data_ml_red <span class="ot">&lt;-</span> data_ml_red <span class="sc">%&gt;%</span></span>
+<span id="cb29-3"><a href="#cb29-3" tabindex="-1"></a>  <span class="fu">group_by</span>(date) <span class="sc">%&gt;%</span></span>
+<span id="cb29-4"><a href="#cb29-4" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">benchmark =</span> Mkt_Cap_3M_Usd <span class="sc">/</span> <span class="fu">sum</span>(Mkt_Cap_3M_Usd)) <span class="sc">%&gt;%</span></span>
+<span id="cb29-5"><a href="#cb29-5" tabindex="-1"></a>  <span class="fu">ungroup</span>()</span></code></pre></div>
+<p>The benchmark represents a dynamic, market-cap-weighted portfolio
+used as a reference for optimization.</p>
+<hr />
+</div>
+</div>
+<div id="unconstrained-benchmark-optimization" class="section level3">
+<h3>Unconstrained Benchmark Optimization</h3>
+<div id="objective" class="section level4">
+<h4>Objective</h4>
+<p>Optimize portfolio weights to maximize the Sharpe Ratio difference
+from the benchmark without imposing constraints on weight changes.</p>
+</div>
+<div id="configuration-and-backtesting-1" class="section level4">
+<h4>Configuration and Backtesting</h4>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" tabindex="-1"></a><span class="co"># Define a simple Keras model configuration</span></span>
+<span id="cb30-2"><a href="#cb30-2" tabindex="-1"></a><span class="co"># here with different activation function, because we also need negative weights</span></span>
+<span id="cb30-3"><a href="#cb30-3" tabindex="-1"></a>config_unconstrained_benchmark <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb30-4"><a href="#cb30-4" tabindex="-1"></a>  <span class="at">layers =</span> <span class="fu">list</span>(</span>
+<span id="cb30-5"><a href="#cb30-5" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span> <span class="dv">32</span>, <span class="at">activation =</span> <span class="st">&quot;linear&quot;</span>),</span>
+<span id="cb30-6"><a href="#cb30-6" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span> <span class="dv">16</span>, <span class="at">activation =</span> <span class="st">&quot;tanh&quot;</span>),</span>
+<span id="cb30-7"><a href="#cb30-7" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dense&quot;</span>, <span class="at">units =</span> <span class="dv">1</span>, <span class="at">activation =</span> <span class="st">&quot;tanh&quot;</span>)  <span class="co"># No custom activation</span></span>
+<span id="cb30-8"><a href="#cb30-8" tabindex="-1"></a>  ),</span>
+<span id="cb30-9"><a href="#cb30-9" tabindex="-1"></a>  <span class="at">loss =</span> <span class="fu">list</span>(</span>
+<span id="cb30-10"><a href="#cb30-10" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">&quot;sharpe_ratio_difference_loss&quot;</span>, <span class="co"># Standard Sharpe Ratio Difference loss with no penalties</span></span>
+<span id="cb30-11"><a href="#cb30-11" tabindex="-1"></a>    <span class="at">lambda_l1 =</span> <span class="dv">0</span>,  <span class="co"># No L1 or L2 penalties</span></span>
+<span id="cb30-12"><a href="#cb30-12" tabindex="-1"></a>    <span class="at">lambda_l2 =</span> <span class="dv">0</span></span>
+<span id="cb30-13"><a href="#cb30-13" tabindex="-1"></a>  ),</span>
+<span id="cb30-14"><a href="#cb30-14" tabindex="-1"></a>  <span class="at">optimizer =</span> <span class="fu">list</span>(<span class="at">name =</span> <span class="st">&quot;optimizer_adam&quot;</span>, <span class="at">learning_rate =</span> <span class="fl">0.001</span>),</span>
+<span id="cb30-15"><a href="#cb30-15" tabindex="-1"></a>  <span class="at">epochs =</span> <span class="dv">50</span>,</span>
+<span id="cb30-16"><a href="#cb30-16" tabindex="-1"></a>  <span class="at">verbose =</span> <span class="dv">0</span>,</span>
+<span id="cb30-17"><a href="#cb30-17" tabindex="-1"></a>  <span class="at">seeds =</span> <span class="fu">c</span>(<span class="dv">42</span>)  <span class="co"># Set random seed for reproducibility</span></span>
+<span id="cb30-18"><a href="#cb30-18" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="co"># Backtest</span></span>
+<span id="cb31-2"><a href="#cb31-2" tabindex="-1"></a>portfolios_bm_unconstrained <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb31-3"><a href="#cb31-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb31-4"><a href="#cb31-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb31-5"><a href="#cb31-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb31-6"><a href="#cb31-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb31-7"><a href="#cb31-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_unconstrained =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_unconstrained_benchmark)),</span>
+<span id="cb31-8"><a href="#cb31-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb31-9"><a href="#cb31-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb31-10"><a href="#cb31-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb31-11"><a href="#cb31-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb31-12"><a href="#cb31-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb31-13"><a href="#cb31-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb31-14"><a href="#cb31-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="results" class="section level4">
+<h4>Results</h4>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" tabindex="-1"></a><span class="co"># Define postprocessing configuration</span></span>
+<span id="cb32-2"><a href="#cb32-2" tabindex="-1"></a>pp_config_bm <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="fu">list</span>(<span class="at">operation =</span> <span class="st">&quot;set_weightsum&quot;</span>, <span class="at">sum =</span> <span class="dv">0</span>, <span class="at">min_weight =</span> <span class="sc">-</span><span class="fl">0.1</span>, <span class="at">max_weight =</span> <span class="fl">0.1</span>, <span class="at">min_sum =</span> <span class="sc">-</span><span class="dv">1</span>, <span class="at">max_sum =</span> <span class="dv">1</span>, <span class="at">allow_short_sale =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb32-3"><a href="#cb32-3" tabindex="-1"></a><span class="co"># combine unconstrained and constrained portfolios</span></span>
+<span id="cb32-4"><a href="#cb32-4" tabindex="-1"></a>combined_portfolios_bm <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb32-5"><a href="#cb32-5" tabindex="-1"></a>  portfolios_bm_unconstrained,</span>
+<span id="cb32-6"><a href="#cb32-6" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_bm_unconstrained, pp_config_bm))</span>
+<span id="cb32-7"><a href="#cb32-7" tabindex="-1"></a>  )</span>
+<span id="cb32-8"><a href="#cb32-8" tabindex="-1"></a></span>
+<span id="cb32-9"><a href="#cb32-9" tabindex="-1"></a><span class="co"># Summarize weights </span></span>
+<span id="cb32-10"><a href="#cb32-10" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(combined_portfolios_bm, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="14%" />
+<col width="8%" />
+<col width="8%" />
+<col width="9%" />
+<col width="8%" />
+<col width="5%" />
+<col width="8%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_unconstrained_1</td>
+<td align="center">-0.8489/0.9605</td>
+<td align="center">0.0474 (0.3514)</td>
+<td align="center">0.3462 (0.0243)</td>
+<td align="center">46.767 (6.1439)</td>
+<td align="center">0.0217</td>
+<td align="center">109.8732 (8.3576)</td>
+<td align="center">6.8246 (0.4387)</td>
+<td align="center">178.1927 (34.0683)</td>
+<td align="center">23.6827</td>
+<td align="center">4547.0773</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_unconstrained_2</td>
+<td align="center">-0.0082/0.0139</td>
+<td align="center">0.0027 (0.0048)</td>
+<td align="center">0.0048 (2e-04)</td>
+<td align="center">0.0113 (9e-04)</td>
+<td align="center">89.0878</td>
+<td align="center">1.7507 (0.1299)</td>
+<td align="center">0.1062 (0.0042)</td>
+<td align="center">151.9792 (18.6113)</td>
+<td align="center">0.3917</td>
+<td align="center">75.2037</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>Large weight differences -0.8489/0.9605 (and -0.0082/0.0139 after
+postprocessing), indicating extreme allocations that are smoothed after
+postprocessing (note, that postprocessing is necessary here, as the
+optimizer cannot guarantee, that benchmark tilts are
+self-financing)</li>
+<li>Large total turnover at 4547.0773, indicating excessive trading
+activity relative to the benchmark at 75.2037</li>
+<li>Concentration in a few assets, leading to poor diversification,
+based on the average Herfindahl-Hirschman Index (HHI) of 46.767 (6.1439)
+(and 0.0113 (9e-04) after postprocessing).</li>
+</ul>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(combined_portfolios_bm, <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">3</span>, <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>) </span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="21%" />
+<col width="12%" />
+<col width="9%" />
+<col width="9%" />
+<col width="7%" />
+<col width="14%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_unconstrained_1</td>
+<td align="center">10.5208***</td>
+<td align="center">1.38***</td>
+<td align="center">55.0888</td>
+<td align="center">4547.0773</td>
+<td align="center">1.1941***</td>
+<td align="center">0.1152***</td>
+<td align="center">-76.6569</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_unconstrained_2</td>
+<td align="center">0.1981**</td>
+<td align="center">0.864***</td>
+<td align="center">1.0000</td>
+<td align="center">75.2037</td>
+<td align="center">0.7629**</td>
+<td align="center">0.0855***</td>
+<td align="center">0.1193</td>
+</tr>
+<tr class="odd">
+<td align="center">benchmark</td>
+<td align="center">0.0938</td>
+<td align="center">0.5133</td>
+<td align="center">0.0000</td>
+<td align="center">17.1261</td>
+<td align="center">0.4839</td>
+<td align="center">NaN</td>
+<td align="center">0.0437</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: Performance-wise we observe the
+following:</p>
+<ul>
+<li>The Sharpe ratio is high at 1.38*** (0.864*** for the postprocessed
+portfolio), larger than the value weighted (given) benchmark at 0.5133,
+therefore significantly exceeding it for the raw as well as for the
+postprocessed portfolio.</li>
+<li>The turnover, reduces down to 75 after postprocessing, indicating
+excessive trading activity relative to the benchmark at 17. This leads
+to a turnover-adjusted Sharpe Ratio of 1.1941*** (0.7629** for the
+postprocessed portfolio), which is still significantly above the
+benchmark at 0.4839. Also, and most importantly, the information ratio
+is significant at 0.1152*** (0.0855*** for the postprocessed portfolio),
+indicating that the portfolio is able to outperform the benchmark
+significantly in raw and postprocessed case, even when taking into
+account tracking error.</li>
+</ul>
+</div>
+</div>
+<div id="constrained-benchmark-optimization" class="section level3">
+<h3>Constrained Benchmark Optimization</h3>
+<p>In the next case, we restrict the portfolio weights to ensure they
+align with the benchmark. We apply activation functions to enforce
+constraints on the benchmark-relative weights.</p>
+<p>Apply constraints:</p>
+<ul>
+<li>Weights bounded between -0.1 and 0.1.</li>
+</ul>
+<div id="updated-activation-configuration" class="section level4">
+<h4>Updated Activation Configuration</h4>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" tabindex="-1"></a><span class="co"># Define a new activation for constrained benchmark-relative weights</span></span>
+<span id="cb34-2"><a href="#cb34-2" tabindex="-1"></a>config_constrained_bm_activation <span class="ot">&lt;-</span> config_unconstrained_benchmark</span>
+<span id="cb34-3"><a href="#cb34-3" tabindex="-1"></a>config_constrained_bm_activation<span class="sc">$</span>layers[[<span class="dv">3</span>]]<span class="sc">$</span>activation <span class="ot">&lt;-</span> <span class="fu">activation_box_sigmoid</span>(</span>
+<span id="cb34-4"><a href="#cb34-4" tabindex="-1"></a>  <span class="at">min_weight =</span> <span class="sc">-</span><span class="fl">0.1</span>, </span>
+<span id="cb34-5"><a href="#cb34-5" tabindex="-1"></a>  <span class="at">max_weight =</span> <span class="fl">0.1</span></span>
+<span id="cb34-6"><a href="#cb34-6" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="backtesting" class="section level4">
+<h4>Backtesting</h4>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" tabindex="-1"></a><span class="co"># Backtest with constrained activation</span></span>
+<span id="cb35-2"><a href="#cb35-2" tabindex="-1"></a>portfolios_bm_constrained <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb35-3"><a href="#cb35-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb35-4"><a href="#cb35-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb35-5"><a href="#cb35-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb35-6"><a href="#cb35-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb35-7"><a href="#cb35-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_constrained =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_constrained_bm_activation)),</span>
+<span id="cb35-8"><a href="#cb35-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb35-9"><a href="#cb35-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb35-10"><a href="#cb35-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb35-11"><a href="#cb35-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb35-12"><a href="#cb35-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb35-13"><a href="#cb35-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb35-14"><a href="#cb35-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="results-1" class="section level4">
+<h4>Results</h4>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" tabindex="-1"></a><span class="co"># combine unconstrained and constrained portfolios</span></span>
+<span id="cb36-2"><a href="#cb36-2" tabindex="-1"></a>combined_portfolios_bm2 <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb36-3"><a href="#cb36-3" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_bm_unconstrained, pp_config_bm),</span>
+<span id="cb36-4"><a href="#cb36-4" tabindex="-1"></a>  portfolios_bm_constrained,</span>
+<span id="cb36-5"><a href="#cb36-5" tabindex="-1"></a>  <span class="fu">postprocessing_portfolios</span>(portfolios_bm_constrained, pp_config_bm)</span>
+<span id="cb36-6"><a href="#cb36-6" tabindex="-1"></a>  )</span>
+<span id="cb36-7"><a href="#cb36-7" tabindex="-1"></a>  )</span>
+<span id="cb36-8"><a href="#cb36-8" tabindex="-1"></a></span>
+<span id="cb36-9"><a href="#cb36-9" tabindex="-1"></a><span class="co"># Summarize weights and performance</span></span>
+<span id="cb36-10"><a href="#cb36-10" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(combined_portfolios_bm2, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="14%" />
+<col width="9%" />
+<col width="8%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="8%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_unconstrained_1</td>
+<td align="center">-0.0082/0.0139</td>
+<td align="center">0.0027 (0.0048)</td>
+<td align="center">0.0048 (2e-04)</td>
+<td align="center">0.0113 (9e-04)</td>
+<td align="center">89.0878</td>
+<td align="center">1.7507 (0.1299)</td>
+<td align="center">0.1062 (0.0042)</td>
+<td align="center">151.9792 (18.6113)</td>
+<td align="center">0.3917</td>
+<td align="center">75.2037</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_constrained_2</td>
+<td align="center">-0.0567/0.0764</td>
+<td align="center">0.0038 (0.0217)</td>
+<td align="center">0.0213 (0.002)</td>
+<td align="center">0.1807 (0.0375)</td>
+<td align="center">5.8220</td>
+<td align="center">6.5745 (0.853)</td>
+<td align="center">0.4226 (0.0457)</td>
+<td align="center">179.3073 (34.6778)</td>
+<td align="center">1.4420</td>
+<td align="center">276.8555</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_constrained_3</td>
+<td align="center">-0.0132/0.0254</td>
+<td align="center">0.0027 (0.0056)</td>
+<td align="center">0.0056 (4e-04)</td>
+<td align="center">0.0142 (0.0019)</td>
+<td align="center">71.3310</td>
+<td align="center">1.7612 (0.0698)</td>
+<td align="center">0.1191 (0.0077)</td>
+<td align="center">132.3958 (14.5055)</td>
+<td align="center">0.4121</td>
+<td align="center">79.1196</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>The constrained portfolios exhibit more stable weight distributions,
+with average standard deviations of 0.0213 (0.002) and 0.0056 (4e-04)
+after postprocessing.</li>
+<li>The average Herfindahl-Hirschman Index (HHI) is now 0.1807 (0.0375)
+and 0.0142 (0.0019) after postprocessing, indicating worse
+diversification, than for the postprocessed unconstrained
+portfolio.</li>
+<li>The total turnover is 276.8555 and 79.1196 after postprocessing,
+indicating a more stable portfolio.</li>
+</ul>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(combined_portfolios_bm2, <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">3</span>, <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table style="width:100%;">
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="22%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="7%" />
+<col width="14%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_unconstrained_1</td>
+<td align="center">0.1981**</td>
+<td align="center">0.864***</td>
+<td align="center">1.000</td>
+<td align="center">75.2037</td>
+<td align="center">0.7629**</td>
+<td align="center">0.0855***</td>
+<td align="center">0.1193</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_constrained_2</td>
+<td align="center">0.7437***</td>
+<td align="center">1.4499***</td>
+<td align="center">3.468</td>
+<td align="center">276.8555</td>
+<td align="center">1.2832***</td>
+<td align="center">0.1194***</td>
+<td align="center">0.3490</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_constrained_3</td>
+<td align="center">0.2687***</td>
+<td align="center">1.0595***</td>
+<td align="center">1.000</td>
+<td align="center">79.1196</td>
+<td align="center">0.9636***</td>
+<td align="center">0.1033***</td>
+<td align="center">0.1722</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.0938</td>
+<td align="center">0.5133</td>
+<td align="center">0.000</td>
+<td align="center">17.1261</td>
+<td align="center">0.4839</td>
+<td align="center">NaN</td>
+<td align="center">0.0437</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: Performance-wise we observe the
+following:</p>
+<ul>
+<li>The Sharpe ratio is highest at 1.4499*** (1.0595*** for the
+postprocessed portfolio), significantly exceeding the benchmark at
+0.5133, and larger than the unconstrained and postprocessed
+portfolio.</li>
+<li>Even when taking transaction costs into account, the
+turnover-adjusted Sharpe Ratio is significant at 1.2832*** (0.9636***
+for the postprocessed portfolio), which is still significantly above the
+benchmark at 0.4839.</li>
+<li>The information ratio is significant at 0.1194*** (0.1033*** for the
+postprocessed portfolio), indicating that the portfolio is able to
+outperform the benchmark significantly in raw and postprocessed case,
+even when taking into account tracking error.</li>
+</ul>
+<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance</span>(combined_portfolios_bm2, <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table style="width:100%;">
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="13%" />
+<col width="7%" />
+<col width="9%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="4%" />
+<col width="4%" />
+<col width="6%" />
+<col width="11%" />
+<col width="4%" />
+<col width="4%" />
+<col width="6%" />
+<col width="8%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Annualized Volatility</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Sortino Ratio</th>
+<th align="center">Max Drawdown</th>
+<th align="center">Skewness</th>
+<th align="center">Kurtosis</th>
+<th align="center">Value at Risk</th>
+<th align="center">Conditional Value at Risk</th>
+<th align="center">Alpha</th>
+<th align="center">Beta</th>
+<th align="center">Tracking Error</th>
+<th align="center">Information Ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_unconstrained_1</td>
+<td align="center">0.1981***</td>
+<td align="center">0.2292</td>
+<td align="center">0.864***</td>
+<td align="center">0.4012</td>
+<td align="center">0.5936</td>
+<td align="center">-0.2331</td>
+<td align="center">5.5958</td>
+<td align="center">-0.0889</td>
+<td align="center">-0.1660</td>
+<td align="center">0.0077***</td>
+<td align="center">1.132***</td>
+<td align="center">0.1017</td>
+<td align="center">1.0436***</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_constrained_2</td>
+<td align="center">0.7437***</td>
+<td align="center">0.5130</td>
+<td align="center">1.4499***</td>
+<td align="center">0.8461</td>
+<td align="center">0.7508</td>
+<td align="center">0.2392</td>
+<td align="center">2.9473</td>
+<td align="center">-0.1620</td>
+<td align="center">-0.2416</td>
+<td align="center">0.0514***</td>
+<td align="center">1.3585***</td>
+<td align="center">0.4536</td>
+<td align="center">1.6404***</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_constrained_3</td>
+<td align="center">0.2687***</td>
+<td align="center">0.2536</td>
+<td align="center">1.0595***</td>
+<td align="center">0.5220</td>
+<td align="center">0.6005</td>
+<td align="center">-0.1290</td>
+<td align="center">5.1067</td>
+<td align="center">-0.0928</td>
+<td align="center">-0.1668</td>
+<td align="center">0.0133***</td>
+<td align="center">1.1651***</td>
+<td align="center">0.1411</td>
+<td align="center">1.3064***</td>
+</tr>
+<tr class="even">
+<td align="center">benchmark</td>
+<td align="center">0.0938**</td>
+<td align="center">0.1827</td>
+<td align="center">0.5133</td>
+<td align="center">0.2192</td>
+<td align="center">0.5281</td>
+<td align="center">-0.4639</td>
+<td align="center">2.5386</td>
+<td align="center">-0.0828</td>
+<td align="center">-0.1373</td>
+<td align="center">0</td>
+<td align="center">1***</td>
+<td align="center">0.0000</td>
+<td align="center">NaN</td>
+</tr>
+</tbody>
+</table>
+<p>[1] “Portfolio” “Annualized Mean” “Annualized Volatility” “Sharpe
+Ratio” “Sortino Ratio” “Max Drawdown”<br />
+[7] “Skewness” “Kurtosis” “Value at Risk” “Conditional Value at Risk”
+“Alpha” “Beta”<br />
+[13] “Tracking Error” “Information Ratio”</p>
+<p><strong>Observation</strong>: Looking at further details,
+performance-wise we observe:</p>
+<ul>
+<li>Here we find the reason for the larger information ratio of the
+postprocessed portfolio in relation to the regular constrained
+portfolio: The alpha is smaller at 0.0514*** to 0.0133<strong><em>,
+while the tracking error is also smaller at 0.4536 to 0.1411. This leads
+to a higher information ratio of 1.6404</em></strong> to 1.3064***.</li>
+<li>The beta is significantly higher for the constrained portfolios at
+1.3585*** to 1.1651***, indicating that the portfolios are more prone to
+systematic or benchmark risk.</li>
+</ul>
+</div>
+</div>
+<div id="penalties-for-sharpe_ratio_difference_loss" class="section level3">
+<h3>Penalties for <code>sharpe_ratio_difference_loss</code></h3>
+<p>The <code>sharpe_ratio_difference_loss</code> function supports the
+application of:</p>
+<ul>
+<li><strong>L1 Penalty (<code>lambda_l1</code>)</strong>: Encourages
+sparse deviations from the benchmark, reducing the number of assets with
+non-zero weight changes.</li>
+<li><strong>L2 Penalty (<code>lambda_l2</code>)</strong>: Promotes
+smoother weight deviations, discouraging extreme differences.</li>
+</ul>
+<p>In this step, we:</p>
+<ol style="list-style-type: decimal">
+<li>Apply L1 and L2 penalties separately.</li>
+<li>Combine L1 and L2 penalties.</li>
+<li>Analyze the results to understand the impact of each penalty.</li>
+</ol>
+<div id="l1-penalty" class="section level4">
+<h4>L1 penalty</h4>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" tabindex="-1"></a><span class="co"># Apply L1 penalty in the configuration</span></span>
+<span id="cb39-2"><a href="#cb39-2" tabindex="-1"></a>config_l1 <span class="ot">&lt;-</span> config_constrained_bm_activation</span>
+<span id="cb39-3"><a href="#cb39-3" tabindex="-1"></a>config_l1<span class="sc">$</span>loss<span class="sc">$</span>lambda_l1 <span class="ot">&lt;-</span> <span class="fl">0.1</span>  <span class="co"># Apply L1 penalty</span></span></code></pre></div>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" tabindex="-1"></a><span class="co"># Backtest with L1 penalty only</span></span>
+<span id="cb40-2"><a href="#cb40-2" tabindex="-1"></a>portfolios_l1 <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb40-3"><a href="#cb40-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb40-4"><a href="#cb40-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb40-5"><a href="#cb40-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb40-6"><a href="#cb40-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb40-7"><a href="#cb40-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_l1 =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_l1)),</span>
+<span id="cb40-8"><a href="#cb40-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb40-9"><a href="#cb40-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb40-10"><a href="#cb40-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb40-11"><a href="#cb40-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb40-12"><a href="#cb40-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb40-13"><a href="#cb40-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb40-14"><a href="#cb40-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="l2-penalty" class="section level4">
+<h4>L2 penalty</h4>
+<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" tabindex="-1"></a><span class="co"># Apply L2 penalty in the configuration</span></span>
+<span id="cb41-2"><a href="#cb41-2" tabindex="-1"></a>config_l2 <span class="ot">&lt;-</span> config_constrained_bm_activation</span>
+<span id="cb41-3"><a href="#cb41-3" tabindex="-1"></a>config_l2<span class="sc">$</span>loss<span class="sc">$</span>lambda_l2 <span class="ot">&lt;-</span> <span class="fl">0.1</span>   <span class="co"># Apply L2 penalty</span></span></code></pre></div>
+<div class="sourceCode" id="cb42"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" tabindex="-1"></a><span class="co"># Backtest with L2 penalty only</span></span>
+<span id="cb42-2"><a href="#cb42-2" tabindex="-1"></a>portfolios_l2 <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb42-3"><a href="#cb42-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb42-4"><a href="#cb42-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb42-5"><a href="#cb42-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb42-6"><a href="#cb42-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb42-7"><a href="#cb42-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_l2 =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_l2)),</span>
+<span id="cb42-8"><a href="#cb42-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb42-9"><a href="#cb42-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb42-10"><a href="#cb42-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb42-11"><a href="#cb42-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb42-12"><a href="#cb42-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb42-13"><a href="#cb42-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb42-14"><a href="#cb42-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="combined-l1-and-l2-penalties" class="section level4">
+<h4>Combined L1 and L2 Penalties</h4>
+<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" tabindex="-1"></a><span class="co"># Apply both L1 and L2 penalties</span></span>
+<span id="cb43-2"><a href="#cb43-2" tabindex="-1"></a>config_l1_l2 <span class="ot">&lt;-</span> config_constrained_bm_activation</span>
+<span id="cb43-3"><a href="#cb43-3" tabindex="-1"></a>config_l1_l2<span class="sc">$</span>loss<span class="sc">$</span>lambda_l1 <span class="ot">&lt;-</span> <span class="fl">0.1</span>  <span class="co"># Apply L1 penalty</span></span>
+<span id="cb43-4"><a href="#cb43-4" tabindex="-1"></a>config_l1_l2<span class="sc">$</span>loss<span class="sc">$</span>lambda_l2 <span class="ot">&lt;-</span> <span class="fl">0.1</span>   <span class="co"># Apply L2 penalty</span></span></code></pre></div>
+<div class="sourceCode" id="cb44"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" tabindex="-1"></a><span class="co"># Backtest with combined L1 and L2 penalties</span></span>
+<span id="cb44-2"><a href="#cb44-2" tabindex="-1"></a>portfolios_l1_l2 <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb44-3"><a href="#cb44-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb44-4"><a href="#cb44-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb44-5"><a href="#cb44-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb44-6"><a href="#cb44-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb44-7"><a href="#cb44-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_l1_l2 =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_l1_l2)),</span>
+<span id="cb44-8"><a href="#cb44-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb44-9"><a href="#cb44-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb44-10"><a href="#cb44-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb44-11"><a href="#cb44-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb44-12"><a href="#cb44-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb44-13"><a href="#cb44-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb44-14"><a href="#cb44-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="comparative-analysis-1" class="section level4">
+<h4>Comparative Analysis</h4>
+<div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" tabindex="-1"></a><span class="co"># Combine portfolios for comparison</span></span>
+<span id="cb45-2"><a href="#cb45-2" tabindex="-1"></a>combined_penalty_portfolios <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb45-3"><a href="#cb45-3" tabindex="-1"></a>  portfolios_bm_constrained,</span>
+<span id="cb45-4"><a href="#cb45-4" tabindex="-1"></a>  portfolios_l1,</span>
+<span id="cb45-5"><a href="#cb45-5" tabindex="-1"></a>  portfolios_l2,</span>
+<span id="cb45-6"><a href="#cb45-6" tabindex="-1"></a>  portfolios_l1_l2)</span>
+<span id="cb45-7"><a href="#cb45-7" tabindex="-1"></a>)</span>
+<span id="cb45-8"><a href="#cb45-8" tabindex="-1"></a></span>
+<span id="cb45-9"><a href="#cb45-9" tabindex="-1"></a><span class="co"># Summarize combined weights</span></span>
+<span id="cb45-10"><a href="#cb45-10" tabindex="-1"></a><span class="co"># be aware that we need to postprocess to get zero-sum tilting portfolios</span></span>
+<span id="cb45-11"><a href="#cb45-11" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(<span class="fu">postprocessing_portfolios</span>(combined_penalty_portfolios, pp_config_bm), <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="13%" />
+<col width="9%" />
+<col width="8%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="8%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_constrained_1</td>
+<td align="center">-0.0132/0.0254</td>
+<td align="center">0.0027 (0.0056)</td>
+<td align="center">0.0056 (4e-04)</td>
+<td align="center">0.0142 (0.0019)</td>
+<td align="center">71.3310</td>
+<td align="center">1.7612 (0.0698)</td>
+<td align="center">0.1191 (0.0077)</td>
+<td align="center">132.3958 (14.5055)</td>
+<td align="center">0.4121</td>
+<td align="center">79.1196</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_2</td>
+<td align="center">-0.0412/0.0497</td>
+<td align="center">0.0027 (0.0074)</td>
+<td align="center">0.0074 (3e-04)</td>
+<td align="center">0.0228 (0.0017)</td>
+<td align="center">44.0571</td>
+<td align="center">2.2131 (0.0533)</td>
+<td align="center">0.1509 (0.0054)</td>
+<td align="center">121.3438 (5.5375)</td>
+<td align="center">0.8610</td>
+<td align="center">165.3202</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_l2_3</td>
+<td align="center">-0.0312/0.0436</td>
+<td align="center">0.0027 (0.0066)</td>
+<td align="center">0.0066 (3e-04)</td>
+<td align="center">0.019 (0.0016)</td>
+<td align="center">53.0908</td>
+<td align="center">2.04 (0.051)</td>
+<td align="center">0.1376 (0.0059)</td>
+<td align="center">126.901 (5.9395)</td>
+<td align="center">0.6376</td>
+<td align="center">122.4146</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_l2_4</td>
+<td align="center">-0.0409/0.0489</td>
+<td align="center">0.0027 (0.0073)</td>
+<td align="center">0.0073 (3e-04)</td>
+<td align="center">0.0228 (0.0016)</td>
+<td align="center">44.1674</td>
+<td align="center">2.2161 (0.0532)</td>
+<td align="center">0.1507 (0.0054)</td>
+<td align="center">121.1042 (5.5864)</td>
+<td align="center">0.8575</td>
+<td align="center">164.6331</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>The L1 penalty leads to more sparse weight distributions, with
+average standard deviations of 0.0074 (3e-04) and 0.0073 (3e-04).</li>
+<li>The L2 penalty results in smoother weight distributions, with
+average standard deviations of 0.0066 (3e-04) and 0.0073 (3e-04).</li>
+<li>The total turnover is lowest for the L1 penalty at 165.3202,
+followed by the combined L1 and L2 penalty at 164.6331 and the L2
+portfolio at 122.4146.</li>
+<li>Diversification (in terms of diversity) is best for the L2 penalty
+at 53.0908, followed by the L1 penalty at 44.0571 and the the combined
+L1 and L2 portfolio.</li>
+</ul>
+<div class="sourceCode" id="cb46"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb46-1"><a href="#cb46-1" tabindex="-1"></a><span class="co"># Summarize combined performance</span></span>
+<span id="cb46-2"><a href="#cb46-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(<span class="fu">postprocessing_portfolios</span>(combined_penalty_portfolios, pp_config_bm), <span class="at">transaction_cost =</span> <span class="fl">0.005</span>, <span class="at">gamma =</span> <span class="dv">3</span>, <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="21%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="7%" />
+<col width="14%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_constrained_1</td>
+<td align="center">0.2687***</td>
+<td align="center">1.0595***</td>
+<td align="center">1</td>
+<td align="center">79.1196</td>
+<td align="center">0.9636***</td>
+<td align="center">0.1033***</td>
+<td align="center">0.1722</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_2</td>
+<td align="center">0.0794</td>
+<td align="center">0.4132</td>
+<td align="center">1</td>
+<td align="center">165.3202</td>
+<td align="center">0.1444</td>
+<td align="center">-0.0079</td>
+<td align="center">0.0240</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_l2_3</td>
+<td align="center">0.1898**</td>
+<td align="center">0.8325**</td>
+<td align="center">1</td>
+<td align="center">122.4146</td>
+<td align="center">0.6657</td>
+<td align="center">0.0553***</td>
+<td align="center">0.1118</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_l2_4</td>
+<td align="center">0.0765</td>
+<td align="center">0.3993</td>
+<td align="center">1</td>
+<td align="center">164.6331</td>
+<td align="center">0.1307</td>
+<td align="center">-0.0096</td>
+<td align="center">0.0215</td>
+</tr>
+<tr class="odd">
+<td align="center">benchmark</td>
+<td align="center">0.0938</td>
+<td align="center">0.5133</td>
+<td align="center">0</td>
+<td align="center">17.1261</td>
+<td align="center">0.4839</td>
+<td align="center">NaN</td>
+<td align="center">0.0437</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: Performance-wise we observe the
+following:</p>
+<ul>
+<li>The Sharpe ratio is highest for the constrained portfolio at
+1.0595*<strong>, significantly exceeding the benchmark at 0.5133 and
+larger than the portfolios with L1 and L2 penalties. The L1 and L2
+penalties lead to Sharpe ratios of 0.4132 and 0.8325</strong>,
+respectively.</li>
+<li>The turnover-adjusted Sharpe Ratio is highest for the constrained
+portfolio at 0.9636***, followed by the L1 and L1/L2 portfolios at
+0.1444 and 0.1307.</li>
+<li>The information ratio is highest for the constrained portfolio at
+0.1033<strong><em>, followed by the L2 and L1/L2 portfolios at
+0.0553</em></strong> and -0.0096.</li>
+</ul>
+</div>
+</div>
+<div id="information-ratio-loss-optimization" class="section level2">
+<h2>Information Ratio Loss Optimization</h2>
+<p>The <strong><code>information_ratio_loss</code></strong> function
+focuses on optimizing the Information Ratio:</p>
+<ul>
+<li><strong>Information Ratio (IR)</strong>: The active return divided
+by the tracking error (volatility of active return relative to the
+benchmark).</li>
+<li>This loss function allows customization through penalties like L1
+and L2, balancing active return and risk.</li>
+</ul>
+<p>This section demonstrates:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Non-regression-based
+<code>information_ratio_loss</code></strong>: Optimize IR with
+constraints.</li>
+<li><strong>Regression-based
+<code>information_ratio_loss</code></strong>: Adds alpha and beta
+modeling for enhanced optimization.</li>
+<li>Applying L1 and L2 penalties together to assess their impact.</li>
+</ol>
+<div id="non-regression-based-information_ratio_loss" class="section level3">
+<h3>Non-Regression-Based <code>information_ratio_loss</code></h3>
+<p>Optimize the Information Ratio without regression constraints while
+applying L1 and L2 penalties to encourage sparse and smooth
+deviations.</p>
+<div class="sourceCode" id="cb47"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" tabindex="-1"></a><span class="co"># Define configuration for non-regression information_ratio_loss</span></span>
+<span id="cb47-2"><a href="#cb47-2" tabindex="-1"></a>config_ir_non_reg <span class="ot">&lt;-</span> config_constrained_bm_activation</span>
+<span id="cb47-3"><a href="#cb47-3" tabindex="-1"></a>config_ir_non_reg<span class="sc">$</span>loss<span class="sc">$</span>name <span class="ot">&lt;-</span> <span class="st">&quot;information_ratio_loss_active_returns&quot;</span></span>
+<span id="cb47-4"><a href="#cb47-4" tabindex="-1"></a>config_ir_non_reg<span class="sc">$</span>loss<span class="sc">$</span>lambda_l1 <span class="ot">&lt;-</span> <span class="fl">0.1</span>  <span class="co"># Apply L1 penalty</span></span>
+<span id="cb47-5"><a href="#cb47-5" tabindex="-1"></a>config_ir_non_reg<span class="sc">$</span>loss<span class="sc">$</span>lambda_l2 <span class="ot">&lt;-</span> <span class="fl">0.1</span>   <span class="co"># Apply L2 penalty</span></span></code></pre></div>
+<div class="sourceCode" id="cb48"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb48-1"><a href="#cb48-1" tabindex="-1"></a><span class="co"># Backtest with non-regression information_ratio_loss</span></span>
+<span id="cb48-2"><a href="#cb48-2" tabindex="-1"></a>portfolios_ir_non_reg <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb48-3"><a href="#cb48-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb48-4"><a href="#cb48-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb48-5"><a href="#cb48-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb48-6"><a href="#cb48-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb48-7"><a href="#cb48-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_ir_non_reg =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_ir_non_reg)),</span>
+<span id="cb48-8"><a href="#cb48-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb48-9"><a href="#cb48-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb48-10"><a href="#cb48-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb48-11"><a href="#cb48-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb48-12"><a href="#cb48-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb48-13"><a href="#cb48-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb48-14"><a href="#cb48-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="regression-based-information_ratio_loss" class="section level3">
+<h3>Regression-Based <code>information_ratio_loss</code></h3>
+<p>The regression-based version of <code>information_ratio_loss</code>
+introduces alpha and beta modeling:</p>
+<ul>
+<li><strong>Alpha</strong>: The component of returns uncorrelated with
+the benchmark.</li>
+<li><strong>Beta</strong>: Sensitivity of portfolio returns to benchmark
+returns.</li>
+</ul>
+<p>By explicitly modeling alpha and beta, this version improves the
+interpretability and precision of IR optimization.</p>
+<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" tabindex="-1"></a><span class="co"># Define configuration for regression-based information_ratio_loss</span></span>
+<span id="cb49-2"><a href="#cb49-2" tabindex="-1"></a>config_ir_reg <span class="ot">&lt;-</span> config_ir_non_reg</span>
+<span id="cb49-3"><a href="#cb49-3" tabindex="-1"></a>config_ir_reg<span class="sc">$</span>loss<span class="sc">$</span>name <span class="ot">&lt;-</span> <span class="st">&quot;information_ratio_loss_regression_based&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb50"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb50-1"><a href="#cb50-1" tabindex="-1"></a><span class="co"># Backtest with regression-based information_ratio_loss</span></span>
+<span id="cb50-2"><a href="#cb50-2" tabindex="-1"></a>portfolios_ir_reg <span class="ot">&lt;-</span> <span class="fu">backtesting_weights</span>(</span>
+<span id="cb50-3"><a href="#cb50-3" tabindex="-1"></a>  <span class="at">data =</span> data_ml_red, </span>
+<span id="cb50-4"><a href="#cb50-4" tabindex="-1"></a>  <span class="at">return_label =</span> return_label, </span>
+<span id="cb50-5"><a href="#cb50-5" tabindex="-1"></a>  <span class="at">benchmark_label =</span> <span class="st">&quot;benchmark&quot;</span>,</span>
+<span id="cb50-6"><a href="#cb50-6" tabindex="-1"></a>  <span class="at">features =</span> features, </span>
+<span id="cb50-7"><a href="#cb50-7" tabindex="-1"></a>  <span class="at">pf_config =</span> <span class="fu">list</span>(<span class="at">keras_weights_ir_reg =</span> <span class="fu">list</span>(<span class="at">weight_func =</span> <span class="st">&quot;keras_weights&quot;</span>, <span class="at">config1 =</span> config_ir_reg)),</span>
+<span id="cb50-8"><a href="#cb50-8" tabindex="-1"></a>  <span class="at">rolling =</span> rolling, </span>
+<span id="cb50-9"><a href="#cb50-9" tabindex="-1"></a>  <span class="at">window_size =</span> window_size, </span>
+<span id="cb50-10"><a href="#cb50-10" tabindex="-1"></a>  <span class="at">step_size =</span> step_size, </span>
+<span id="cb50-11"><a href="#cb50-11" tabindex="-1"></a>  <span class="at">offset =</span> offset, </span>
+<span id="cb50-12"><a href="#cb50-12" tabindex="-1"></a>  <span class="at">num_cores =</span> num_cores, </span>
+<span id="cb50-13"><a href="#cb50-13" tabindex="-1"></a>  <span class="at">verbose =</span> verbose</span>
+<span id="cb50-14"><a href="#cb50-14" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="combined-analysis" class="section level3">
+<h3>Combined Analysis</h3>
+<div id="comparing-non-regression-and-regression-based-results" class="section level4">
+<h4>Comparing Non-Regression and Regression-Based Results</h4>
+<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" tabindex="-1"></a><span class="co"># Combine portfolios for comparison</span></span>
+<span id="cb51-2"><a href="#cb51-2" tabindex="-1"></a>combined_ir_portfolios <span class="ot">&lt;-</span> <span class="fu">combine_portfolioReturns</span>(<span class="fu">list</span>(</span>
+<span id="cb51-3"><a href="#cb51-3" tabindex="-1"></a>  portfolios_bm_constrained,</span>
+<span id="cb51-4"><a href="#cb51-4" tabindex="-1"></a>  portfolios_l1_l2,</span>
+<span id="cb51-5"><a href="#cb51-5" tabindex="-1"></a>  portfolios_ir_non_reg,</span>
+<span id="cb51-6"><a href="#cb51-6" tabindex="-1"></a>  portfolios_ir_reg</span>
+<span id="cb51-7"><a href="#cb51-7" tabindex="-1"></a>))</span>
+<span id="cb51-8"><a href="#cb51-8" tabindex="-1"></a></span>
+<span id="cb51-9"><a href="#cb51-9" tabindex="-1"></a><span class="co"># Summarize combined weights</span></span>
+<span id="cb51-10"><a href="#cb51-10" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.weights</span>(<span class="fu">postprocessing_portfolios</span>(combined_ir_portfolios, pp_config_bm), <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Weights Summary with Advanced Metrics</caption>
+<colgroup>
+<col width="13%" />
+<col width="9%" />
+<col width="8%" />
+<col width="10%" />
+<col width="8%" />
+<col width="5%" />
+<col width="8%" />
+<col width="8%" />
+<col width="12%" />
+<col width="8%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Weights (Min/Max)</th>
+<th align="center">Weights M(SD)</th>
+<th align="center">Std.Dev./Date M(SD)</th>
+<th align="center">HHI M(SD)</th>
+<th align="center">Diversity</th>
+<th align="center">L1 Norm M(SD)</th>
+<th align="center">L2 Norm M(SD)</th>
+<th align="center">Avg. Short Weights M(SD)</th>
+<th align="center">Average Turnover</th>
+<th align="center">Total Turnover</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_constrained_1</td>
+<td align="center">-0.0132/0.0254</td>
+<td align="center">0.0027 (0.0056)</td>
+<td align="center">0.0056 (4e-04)</td>
+<td align="center">0.0142 (0.0019)</td>
+<td align="center">71.3310</td>
+<td align="center">1.7612 (0.0698)</td>
+<td align="center">0.1191 (0.0077)</td>
+<td align="center">132.3958 (14.5055)</td>
+<td align="center">0.4121</td>
+<td align="center">79.1196</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_l2_2</td>
+<td align="center">-0.0409/0.0489</td>
+<td align="center">0.0027 (0.0073)</td>
+<td align="center">0.0073 (3e-04)</td>
+<td align="center">0.0228 (0.0016)</td>
+<td align="center">44.1674</td>
+<td align="center">2.2161 (0.0532)</td>
+<td align="center">0.1507 (0.0054)</td>
+<td align="center">121.1042 (5.5864)</td>
+<td align="center">0.8575</td>
+<td align="center">164.6331</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_ir_non_reg_3</td>
+<td align="center">-0.0413/0.0483</td>
+<td align="center">0.0027 (0.0074)</td>
+<td align="center">0.0074 (3e-04)</td>
+<td align="center">0.0228 (0.0016)</td>
+<td align="center">44.0251</td>
+<td align="center">2.2228 (0.0536)</td>
+<td align="center">0.151 (0.0053)</td>
+<td align="center">120.8854 (5.6925)</td>
+<td align="center">0.8603</td>
+<td align="center">165.1858</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_ir_reg_4</td>
+<td align="center">-0.0411/0.048</td>
+<td align="center">0.0027 (0.0073)</td>
+<td align="center">0.0073 (3e-04)</td>
+<td align="center">0.0226 (0.0016)</td>
+<td align="center">44.4829</td>
+<td align="center">2.2146 (0.0547)</td>
+<td align="center">0.1502 (0.0054)</td>
+<td align="center">120.9688 (5.2954)</td>
+<td align="center">0.8540</td>
+<td align="center">163.9593</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: The weight summary shows:</p>
+<ul>
+<li>The constrained portfolios exhibit more stable weight distributions,
+with average standard deviations of 0.0074 (3e-04) and 0.0073
+(3e-04).</li>
+<li>The average Herfindahl-Hirschman Index (HHI) is equally low for all
+portfolios, indicating better diversification.</li>
+<li>The total turnover is lowest for the L1 and L2 penalties at
+164.6331, followed by the regression-based portfolio at 163.9593.</li>
+<li>All in all, the portfolios show not many distinguishing
+factors.</li>
+</ul>
+<div class="sourceCode" id="cb52"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" tabindex="-1"></a><span class="co"># Summarize combined performance</span></span>
+<span id="cb52-2"><a href="#cb52-2" tabindex="-1"></a>tt <span class="ot">&lt;-</span> <span class="fu">summary.performance2</span>(<span class="fu">postprocessing_portfolios</span>(combined_ir_portfolios, pp_config_bm), <span class="at">test =</span> <span class="cn">TRUE</span>, <span class="at">print =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<table>
+<caption>Portfolio Performance Summary</caption>
+<colgroup>
+<col width="21%" />
+<col width="12%" />
+<col width="10%" />
+<col width="10%" />
+<col width="7%" />
+<col width="14%" />
+<col width="13%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Portfolio</th>
+<th align="center">Annualized Mean</th>
+<th align="center">Sharpe Ratio</th>
+<th align="center">Active Share</th>
+<th align="center">Turnover</th>
+<th align="center">TC Adjusted Sharpe</th>
+<th align="center">Information Ratio</th>
+<th align="center">CER (gamma=3)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">keras_weights_constrained_1</td>
+<td align="center">0.2687***</td>
+<td align="center">1.0595***</td>
+<td align="center">1</td>
+<td align="center">79.1196</td>
+<td align="center">1.0404***</td>
+<td align="center">0.1033***</td>
+<td align="center">0.1722</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_l1_l2_2</td>
+<td align="center">0.0765</td>
+<td align="center">0.3993</td>
+<td align="center">1</td>
+<td align="center">164.6331</td>
+<td align="center">0.3456</td>
+<td align="center">-0.0096</td>
+<td align="center">0.0215</td>
+</tr>
+<tr class="odd">
+<td align="center">keras_weights_ir_non_reg_3</td>
+<td align="center">0.0724</td>
+<td align="center">0.3786</td>
+<td align="center">1</td>
+<td align="center">165.1858</td>
+<td align="center">0.3246</td>
+<td align="center">-0.0119</td>
+<td align="center">0.0176</td>
+</tr>
+<tr class="even">
+<td align="center">keras_weights_ir_reg_4</td>
+<td align="center">0.0799</td>
+<td align="center">0.421</td>
+<td align="center">1</td>
+<td align="center">163.9593</td>
+<td align="center">0.367</td>
+<td align="center">-0.0077</td>
+<td align="center">0.0258</td>
+</tr>
+<tr class="odd">
+<td align="center">benchmark</td>
+<td align="center">0.0938</td>
+<td align="center">0.5133</td>
+<td align="center">0</td>
+<td align="center">17.1261</td>
+<td align="center">0.5074</td>
+<td align="center">NaN</td>
+<td align="center">0.0437</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Observation</strong>: Performance-wise we observe the
+following:</p>
+<ul>
+<li>The constrained portfolio exhibits the highest Sharpe ratio at
+1.0595***, significantly exceeding the benchmark at 0.5133 and larger
+than the portfolios with information ratio optimization.</li>
+<li>The turnover-adjusted Sharpe Ratio is highest for the constrained
+portfolio at 1.0404***, followed by the regression-based portfolio at
+0.367.</li>
+<li>The information ratio is highest for the constrained portfolio at
+0.1033***, followed by the non-regression and regression-based
+portfolios at -0.0119 and -0.0077.</li>
+<li>The Certainty Equivalent Return (CER) is highest for the constrained
+portfolio at , followed by the non-regression and regression-based
+portfolios at and .</li>
+<li>Most interestingly, its not the information ratio based optimal
+portfolios that shows the highest information rate.</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div id="conclusion-1" class="section level1">
+<h1>Conclusion</h1>
+<p>In this notebook, we have demonstrated how to optimize portfolio
+weights using Keras models in R, focusing on practical constraints and
+benchmark-relative optimization. We have covered various portfolio
+optimization types plus different loss functions.</p>
+</div>
+<div id="appendix" class="section level1">
+<h1>Appendix</h1>
+<div id="detailed-metrics-activation-functions-and-postprocessing-routines" class="section level2">
+<h2>Detailed Metrics, Activation Functions, and Postprocessing
+Routines</h2>
+<div id="available-metrics" class="section level4">
+<h4><strong>Available Metrics</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Portfolio Metrics (via
+<code>summary.performance</code>)</strong></p>
+<ul>
+<li><p><strong>Absolute Metrics:</strong></p>
+<ul>
+<li>Annualized Mean Return</li>
+<li>Annualized Volatility</li>
+<li>Sharpe Ratio (with Memmel test)</li>
+<li>Sortino Ratio</li>
+<li>Maximum Drawdown</li>
+<li>Skewness and Kurtosis</li>
+<li>Value at Risk (VaR) and Conditional VaR (CVaR)</li>
+</ul></li>
+<li><p><strong>Relative Metrics:</strong></p>
+<ul>
+<li>Alpha, Beta (CAPM)</li>
+<li>Tracking Error</li>
+<li>Information Ratio (IR with p-values)</li>
+</ul></li>
+<li><p><strong>Additional Metrics:</strong></p>
+<ul>
+<li>Transaction Cost Adjusted Sharpe Ratio</li>
+<li>Certainty Equivalent Return (adjusted for risk aversion, γ)</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Weight-Based Metrics (via
+<code>summary.weights</code>)</strong></p>
+<ul>
+<li><p><strong>Statistical Summaries:</strong></p>
+<ul>
+<li>Weight Mean and Standard Deviation (per date and portfolio)</li>
+<li>Minimum and Maximum Weight</li>
+</ul></li>
+<li><p><strong>Diversity Measures:</strong></p>
+<ul>
+<li>Herfindahl-Hirschman Index (HHI)</li>
+<li>Diversity Inverse of HHI</li>
+</ul></li>
+<li><p><strong>Norms:</strong></p>
+<ul>
+<li>L1 Norm (sum of absolute weights)</li>
+<li>L2 Norm (Euclidean norm)</li>
+</ul></li>
+<li><p><strong>Short Positions:</strong></p>
+<ul>
+<li>Count of Short Weights (negative weights)</li>
+</ul></li>
+<li><p><strong>Turnover Analysis:</strong></p>
+<ul>
+<li>Average Turnover Per Period</li>
+<li>Total Turnover</li>
+</ul></li>
+</ul></li>
+<li><p><strong>Correlation Analysis (via
+<code>summary.correlation</code>)</strong></p>
+<ul>
+<li>Correlation matrix between portfolio returns and a benchmark or
+among portfolios.</li>
+</ul></li>
+</ol>
+</div>
+<div id="activation-functions-and-constraints" class="section level4">
+<h4><strong>Activation Functions and Constraints</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Portfolio Weight Normalization (Set Weights
+Sum):</strong></p>
+<ul>
+<li>Ensures weights sum to a specific value (e.g., 1 for fully invested
+portfolios).</li>
+<li>Handles short-sale constraints, min/max weights, and bounds on
+sum.</li>
+</ul></li>
+<li><p><strong>Weight Regularization (Flatten Weights):</strong></p>
+<ul>
+<li><strong>L1 Regularization:</strong> Shrinks weights towards zero
+(lasso-like behavior).</li>
+<li><strong>L2 Regularization:</strong> Penalizes large weights
+(ridge-like behavior).</li>
+<li><strong>Elastic Net Mixing:</strong> Combines L1 and L2
+regularization using a mixing parameter.</li>
+</ul></li>
+<li><p><strong>Turnover Reduction:</strong></p>
+<ul>
+<li><strong>Linear Smoothing:</strong> Incrementally adjusts weights
+toward previous values.</li>
+<li><strong>Exponential Smoothing:</strong> Weighted adjustment favoring
+recent weights.</li>
+</ul></li>
+<li><p><strong>Diversification Enhancement:</strong></p>
+<ul>
+<li>Targets an HHI threshold for diversity.</li>
+<li>Adjusts weights to meet desired concentration limits.</li>
+</ul></li>
+</ol>
+</div>
+<div id="postprocessing-routines" class="section level4">
+<h4><strong>Postprocessing Routines</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Weight Adjustments:</strong></p>
+<ul>
+<li>Apply constraints (e.g., normalization, bounds).</li>
+<li>Adjust for regularization (L1/L2) and diversity (HHI targets).</li>
+<li>Reduce portfolio turnover to minimize transaction costs.</li>
+</ul></li>
+<li><p><strong>Recalculation of Portfolio Returns:</strong></p>
+<ul>
+<li>Compute new portfolio returns after weight adjustments.</li>
+<li>Integrate with benchmark returns if applicable.</li>
+</ul></li>
+</ol>
+</div>
+<div id="summary-functions" class="section level4">
+<h4><strong>Summary Functions</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong><code>summary.performance</code>:</strong></p>
+<ul>
+<li>Provides a comprehensive analysis of portfolio metrics.</li>
+<li>Includes statistical tests for Sharpe ratio, alpha, and IR
+significance.</li>
+<li>Outputs results in a structured table with optional significance
+stars.</li>
+</ul></li>
+<li><p><strong><code>summary.weights</code>:</strong></p>
+<ul>
+<li>Computes detailed weight statistics and turnover metrics.</li>
+<li>Summarizes portfolio diversity and weight constraints.</li>
+</ul></li>
+<li><p><strong><code>summary.correlation</code>:</strong></p>
+<ul>
+<li>Calculates correlation among portfolio returns or against a
+benchmark.</li>
+<li>Produces an easy-to-read correlation matrix.</li>
+</ul></li>
+<li><p><strong><code>summary.performance2</code>:</strong></p>
+<ul>
+<li>Advanced portfolio performance with transaction costs and certainty
+equivalent returns.</li>
+</ul></li>
+<li><p><strong><code>combine_portfolioReturns</code>:</strong></p>
+<ul>
+<li>Combines multiple <code>portfolioReturns</code> objects into one,
+ensuring consistency across benchmarks and models.</li>
+</ul></li>
+</ol>
+</div>
+<div id="visualization-plot.portfolioreturns" class="section level4">
+<h4><strong>Visualization
+(<code>plot.portfolioReturns</code>)</strong></h4>
+<ul>
+<li>Plots cumulative returns for multiple portfolios.</li>
+<li>Supports additional PerformanceAnalytics visualizations (e.g.,
+wealth index, rolling statistics).</li>
+</ul>
+<p>Certainly! Let’s delve deeper into the various metrics used in
+portfolio analysis, particularly those that assess distance from a
+benchmark, regularization, and other key performance factors.</p>
+</div>
+<div id="keras-metrics" class="section level3">
+<h3>Keras Metrics</h3>
+<div id="distance-from-benchmark-metrics" class="section level4">
+<h4><strong>1. Distance from Benchmark Metrics</strong></h4>
+<div id="l1-distance-from-benchmark-distance_from_benchmark_l1_metric" class="section level5">
+<h5><strong>L1 Distance from Benchmark
+(<code>distance_from_benchmark_l1_metric</code>)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The sum of the absolute differences
+between portfolio weights and benchmark weights.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{L1 Distance} = \sum_{i=1}^n \left| w_i^\text{portfolio} -
+w_i^\text{benchmark} \right|
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Measures deviation from the benchmark in a straightforward way.</li>
+<li>Helps control active risk by limiting how far portfolio weights
+deviate from the benchmark.</li>
+<li>Useful for minimizing tracking error in a constrained optimization
+setting.</li>
+</ul></li>
+</ul>
+</div>
+<div id="l2-distance-from-benchmark-distance_from_benchmark_l2_metric" class="section level5">
+<h5><strong>L2 Distance from Benchmark
+(<code>distance_from_benchmark_l2_metric</code>)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The Euclidean distance between
+portfolio weights and benchmark weights.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{L2 Distance} = \sqrt{\sum_{i=1}^n \left( w_i^\text{portfolio} -
+w_i^\text{benchmark} \right)^2}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Penalizes larger deviations more heavily than L1.</li>
+<li>Smooths weight differences, useful for optimizing risk-adjusted
+performance.</li>
+</ul></li>
+</ul>
+</div>
+<div id="tracking-error-te" class="section level5">
+<h5><strong>Tracking Error (TE)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The standard deviation of the
+difference between portfolio returns and benchmark returns over
+time.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{TE} = \sqrt{\frac{1}{T} \sum_{t=1}^T \left( r_t^\text{portfolio} -
+r_t^\text{benchmark} \right)^2}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Measures how closely the portfolio tracks the benchmark.</li>
+<li>A low TE indicates a passive strategy, while a high TE suggests
+active management.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="regularization-metrics" class="section level4">
+<h4><strong>2. Regularization Metrics</strong></h4>
+<div id="l1-norm-of-portfolio-weights-l1_weight_metric" class="section level5">
+<h5><strong>L1 Norm of Portfolio Weights
+(<code>l1_weight_metric</code>)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The sum of the absolute values of
+portfolio weights.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{L1 Norm} = \sum_{i=1}^n |w_i^\text{portfolio}|
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Encourages sparsity in portfolio weights, favoring fewer active
+positions.</li>
+<li>Useful for managing transaction costs by limiting the number of
+trades.</li>
+</ul></li>
+</ul>
+</div>
+<div id="l2-norm-of-portfolio-weights-l2_weight_metric" class="section level5">
+<h5><strong>L2 Norm of Portfolio Weights
+(<code>l2_weight_metric</code>)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The square root of the sum of
+squared portfolio weights.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{L2 Norm} = \sqrt{\sum_{i=1}^n \left(w_i^\text{portfolio}\right)^2}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Penalizes extreme positions and promotes weight regularization.</li>
+<li>Helps prevent overconcentration in specific assets.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="performance-metrics" class="section level4">
+<h4><strong>3. Performance Metrics</strong></h4>
+<div id="sharpe-ratio" class="section level5">
+<h5><strong>Sharpe Ratio</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: Measures risk-adjusted return using
+the ratio of excess return to standard deviation.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{Sharpe Ratio} = \frac{\mathbb{E}[r^\text{portfolio} -
+r^\text{risk-free}]}{\sigma^\text{portfolio}}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Evaluates overall portfolio performance relative to risk taken.</li>
+</ul></li>
+</ul>
+</div>
+<div id="sortino-ratio" class="section level5">
+<h5><strong>Sortino Ratio</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: Similar to the Sharpe Ratio but only
+considers downside risk.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{Sortino Ratio} = \frac{\mathbb{E}[r^\text{portfolio} -
+r^\text{risk-free}]}{\sigma^\text{downside}}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Better for asymmetrical return distributions or portfolios with
+minimal upside volatility.</li>
+</ul></li>
+</ul>
+</div>
+<div id="information-ratio-ir" class="section level5">
+<h5><strong>Information Ratio (IR)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: Measures risk-adjusted active return
+relative to a benchmark.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{IR} = \frac{\mathbb{E}[r^\text{portfolio} -
+r^\text{benchmark}]}{\text{Tracking Error}}
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Assesses how much excess return is generated per unit of active
+risk.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="diversification-metrics" class="section level4">
+<h4><strong>4. Diversification Metrics</strong></h4>
+<div id="herfindahl-hirschman-index-hhi" class="section level5">
+<h5><strong>Herfindahl-Hirschman Index (HHI)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: Measures portfolio
+concentration.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{HHI} = \sum_{i=1}^n \left(w_i^\text{portfolio}\right)^2
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Low HHI indicates a well-diversified portfolio, while high HHI
+suggests concentration risk.</li>
+</ul></li>
+</ul>
+</div>
+<div id="active-share" class="section level5">
+<h5><strong>Active Share</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The proportion of portfolio weights
+differing from the benchmark.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{Active Share} = \frac{1}{2} \sum_{i=1}^n \left|
+w_i^\text{portfolio} - w_i^\text{benchmark} \right|
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>A measure of active management; values closer to 1 indicate high
+divergence from the benchmark.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="risk-metrics" class="section level4">
+<h4><strong>5. Risk Metrics</strong></h4>
+<div id="maximum-drawdown" class="section level5">
+<h5><strong>Maximum Drawdown</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The maximum observed loss from a
+portfolio’s peak value.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{Max Drawdown} = \max_{t} \left(\frac{\text{Portfolio
+Value}_{\text{peak}} - \text{Portfolio Value}_t}{\text{Portfolio
+Value}_{\text{peak}}}\right)
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Measures worst-case risk exposure.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="value-at-risk-var" class="section level4">
+<h4><strong>Value at Risk (VaR)</strong></h4>
+<ul>
+<li><p><strong>Definition</strong>: The maximum expected loss at a
+certain confidence level.</p></li>
+<li><p><strong>Formula</strong> (for a normal distribution): <span class="math display">\[
+\text{VaR} = - \mu + z_\alpha \cdot \sigma
+\]</span> where <span class="math inline">\(z_\alpha\)</span> is the
+critical value for confidence level <span class="math inline">\(\alpha\)</span>.</p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Quantifies tail risk.</li>
+</ul></li>
+</ul>
+<div id="conditional-var-cvar" class="section level5">
+<h5><strong>Conditional VaR (CVaR)</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: The expected loss beyond the VaR
+threshold.</p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Addresses limitations of VaR by considering extreme losses.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="turnover-metrics" class="section level4">
+<h4><strong>6. Turnover Metrics</strong></h4>
+<div id="turnover" class="section level5">
+<h5><strong>Turnover</strong></h5>
+<ul>
+<li><p><strong>Definition</strong>: Measures the trading activity in a
+portfolio.</p></li>
+<li><p><strong>Formula</strong>: <span class="math display">\[
+\text{Turnover} = \sum_{i=1}^n |w_i^\text{current} -
+w_i^\text{previous}|
+\]</span></p></li>
+<li><p><strong>Use Case</strong>:</p>
+<ul>
+<li>Tracks transaction costs and trading frequency.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div id="applications-of-metrics" class="section level4">
+<h4><strong>Applications of Metrics</strong></h4>
+<ol style="list-style-type: decimal">
+<li><p><strong>Portfolio Optimization</strong>:</p>
+<ul>
+<li>Use L1 and L2 distances to control deviations from benchmarks.</li>
+<li>Employ diversity metrics to avoid concentration risk.</li>
+<li>Minimize turnover for cost-effective portfolio management.</li>
+</ul></li>
+<li><p><strong>Backtesting</strong>:</p>
+<ul>
+<li>Evaluate historical performance using Sharpe, Sortino, and
+Information Ratios.</li>
+<li>Analyze drawdowns, VaR, and CVaR for risk assessment.</li>
+</ul></li>
+<li><p><strong>Regularization</strong>:</p>
+<ul>
+<li>Apply L1/L2 norms to constrain weights, balancing sparsity and
+concentration.</li>
+</ul></li>
+<li><p><strong>Active Management</strong>:</p>
+<ul>
+<li>Use metrics like Active Share and IR to assess the effectiveness of
+active strategies.</li>
+</ul></li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

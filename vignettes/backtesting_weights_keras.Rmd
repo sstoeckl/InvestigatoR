@@ -7,6 +7,7 @@ output:
     toc: true
   rmarkdown::pdf_document:
     toc: true
+output_dir: "inst/doc/"
 vignette: >
   %\VignetteIndexEntry{Backtesting Portfolio Weight Optimization}
   %\VignetteEncoding{UTF-8}
@@ -330,8 +331,8 @@ stock_ids <- data_ml %>%
     n_obs = n()
   ) %>%
   filter(n_obs == max(n_obs)) %>% 
-  distinct(stock_id) %>%
-  dplyr::slice(1:100)  # Limit to 100 assets for speed
+  distinct(stock_id) #%>%
+  #dplyr::slice(1:100)  # Limit to 100 assets for speed
 
 # Filter the dataset to a reduced subset
 data_ml_red <- data_ml %>%
@@ -598,9 +599,9 @@ tt <- summary.weights(portfolios_raw_unconstrained, print=TRUE)
 
 **Observation**: The weight summary reveals:
 
-- Large weight differences between -0.9781 an 0.9897, whereas the average weight standard deviation per date is 0.44.
-- Large total turnover at 1929.3, indicating that throughout the backtest, the portfolio was completely turned over 1929 times.
-- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of 34.32.
+- Large weight differences (Min/Max: `r tt[["Weights (Min/Max)"]]`, indicating extreme allocations, the timeseries average weight standard deviation (and its timeseries standard deviation) per date is `r tt[["Std.Dev./Date M(SD)"]]`.
+- Large total turnover at `r tt[["Total Turnover"]]`, indicating that throughout the backtest, the portfolio was completely turned over `r round(tt[["Total Turnover"]],0)` times.
+- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of `r tt[["HHI M(SD)"]]`.
 
 We can evaluate the portfolio's performance using the `summary.performance` and/or `summary.performance2` functions. These provide insights into key metrics like Sharpe Ratio, turnover, and diversification.
 
@@ -611,10 +612,10 @@ tt <- summary.performance2(portfolios_raw_unconstrained, transaction_cost = 0.00
 
 **Observation**: Performance-wise we observe the following:
 
-- The Sharpe Ratio is high at 1.0834, (not significantly) larger than the equally weighted benchmark at 0.8494.
-- The turnover, however, is very high at 1929, indicating excessive trading activity relative to the equally weighted benchmark at 17.3122.
-- Taking into account transaction cost at 0.005 (5 basis points), this leads to a turnover-adjusted Sharpe Ratio of 1.0051, which is still above the equally weighted benchmark at 0.8257.
-- Due to the significantly larger annualized return of 8.0815 compared to the benchmark at 0.1875, and the corresponding standard deviation, the certainty equivalent return is very negative at all levels of risk aversion.
+- The Sharpe Ratio is high at `r tt[["Sharpe Ratio"]][1]`, whereas the one of the equally weighted portfolios is `r tt[["Sharpe Ratio"]][2]`.
+- The turnover, however, is very high at `r round(tt[["Turnover"]][1],0)`, indicating excessive trading activity relative to the equally weighted benchmark at `r round(tt[["Turnover"]][2],0)`
+- Taking into account transaction cost at 0.005 (5 basis points), this leads to a turnover-adjusted Sharpe Ratio of `r tt[["TC Adjusted Sharpe"]][1]`, which is still above the equally weighted benchmark at `r tt[["TC Adjusted Sharpe"]][2]`.
+- Due to the significantly larger annualized return of `r tt[["Annualized Mean"]][1]` compared to the benchmark at `r tt[["Annualized Mean"]][2]`, the certainty equivalent return is very negative at all levels of risk aversion (`r tt[["CER (gamma=3)"]][1]`), compared to the benchmark at `r tt[["CER (gamma=3)"]][2]`.
 
 While the Sharpe Ratio may appear high, other metrics like turnover and diversification are very sub-optimal, making the portfolio impractical for real-world use.
 
@@ -639,9 +640,9 @@ tt <- summary.weights(portfolios_postprocessed, print=TRUE)
 
 **Observation**: The postprocessing step enforces constraints on the portfolio weights, leading to:
 
-- Somehow improved weights, which are now between 0 and 0.0434.
-- The total turnover is reduced to 56.76, indicating a more stable portfolio.
-- The average Herfindahl-Hirschman Index (HHI) is now 0.037, reflecting much better diversification.
+- Somehow improved weights, which are now between in the interval `r tt[["Weights (Min/Max)"]]`.
+- The total turnover is reduced to `r tt[["Total Turnover"]][1]`, indicating a more stable portfolio.
+- The average Herfindahl-Hirschman Index (HHI) is now `r tt[["HHI M(SD)"]][1]`, reflecting much better diversification.
 
 Potentially this will make the portfolio be very close to the equally weighted portfolio, but with a slightly higher Sharpe Ratio.
 
@@ -652,9 +653,9 @@ tt <- summary.performance2(portfolios_postprocessed, transaction_cost = 0.005, g
 
 **Observation**: The postprocessed portfolio shows:
 
-- A much better Sharpe ratio, significantly exceeding the equally weighted portfolio at 0.9131.
-- This even holds when applying transaction cost (0.8698 vs. 0.8257), due to a much decreased turnover of 56.76.
-- The certainty equivalent return is now positive for all risk aversion levels $\leq 4$, indicating a more stable and practical portfolio.
+- A much better Sharpe ratio, significantly exceeding the equally weighted portfolio at `r tt[["Sharpe Ratio"]][1]` vs. `r tt[["Sharpe Ratio"]][2]`.
+- This even holds when applying transaction cost (`r tt[["TC Adjusted Sharpe"]][1]` vs. `r tt[["TC Adjusted Sharpe"]][2]`), due to a much decreased turnover of `r round(tt$Turnover[1],0)`.
+- The certainty equivalent return is now positive at the given risk level, indicating a more stable and practical portfolio.
 
 #### Results and Insights
 
@@ -718,10 +719,10 @@ tt <- summary.weights(combined_portfolios, print=TRUE)
 
 **Observation**: The weight summary shows:
 
-- The `activation_box_sigmoid` function naturally enforces bounded weights, leading to more realistic allocations. The maximum weight is now 0.0808 (before postprocessing, which scales it up to 0.1)
-- The average weight standard deviation per date is 0.0046, indicating a very stable distribution.
-- The average Herfindahl-Hirschman Index (HHI) is now very low at 0.0035, reflecting very good diversification, which is scaled up to 0.0289 after postprocessing.
-- The total turnover is 11.45 (38.54 after postprocessing).
+- The `activation_box_sigmoid` function naturally enforces bounded weights, leading to more realistic allocations. The min/max weights are now `r tt[["Weights (Min/Max)"]][2]` (and `r tt[["Weights (Min/Max)"]][3]` after postprocessing).
+- The average weight standard deviation per date is `r tt[["Std.Dev./Date M(SD)"]][2]`, indicating a very stable distribution.
+- The average Herfindahl-Hirschman Index (HHI) is now very low at `r tt[["HHI M(SD)"]][2]` (and `r tt[["HHI M(SD)"]][3]` after postprocessing), reflecting excellent diversification that is slightly scaled up after postprocessing.
+- The total turnover is significantly reduced to `r tt[["Total Turnover"]][2]` (and `r tt[["Total Turnover"]][3]` after postprocessing).
 
 ```{r combine_portfolios_p, cache=TRUE, results='asis'}
 # Summarize combined performance
@@ -730,8 +731,8 @@ tt<- summary.performance2(combined_portfolios, transaction_cost = 0.005, gamma =
 
 **Observation**: The performance summary reveals:
 
-- The annualized Sharpe Ratio of the postprocessed portfolio is 1.1689, significantly exceeding the equally weighted benchmark at 0.8494 and also exceeding the one of the (postprocessed) unconstrained optimization. 
-- Due to the much smaller overall turnover, the turnover-adjusted Sharpe Ratio is 1.1119, the highest among all of those portfolios tested so far!
+- The annualized Sharpe Ratio of the postprocessed portfolio is `r tt[["Sharpe Ratio"]][3]`, significantly exceeding the equally weighted benchmark at `r tt[["Sharpe Ratio"]][4]` and also exceeding the one of the (postprocessed) unconstrained optimization at `r tt[["Sharpe Ratio"]][1]`. 
+- Due to the much smaller overall turnover, the turnover-adjusted Sharpe Ratio of the postprocessed portfolio is `r tt[["TC Adjusted Sharpe"]][3]`, the highest among all of those portfolios tested so far!
 
 #### Results and Insights
 
@@ -907,8 +908,7 @@ tt <- summary.weights(postprocessing_portfolios(combined_portfolios2, pp_config)
 
 **Observation**: The weight summary shows:
 
-- It is the transaction cost penalty that leads to the most significant changes in turnover, with the nlowest turnover being shown for the combined constraints as well as for the transaction cost constrained portfolio (approx. 32 and 34).
-- Equivalently the lowest diversification in terms of the average Herfindahl-Hirschman Index (HHI) is shown for the diversification constrained portfolios at 0.02, which is only lower for the combined portfolios.
+- Most constrained portfolios show similar levels of diversification and turnover.
 - It is hard from this analysis to see the impact of the leverage constraint, as the leverage is already at 1.0 for the unconstrained portfolios.
 
 ```{r compare_portfolios_p, results='asis', cache=TRUE}
@@ -919,7 +919,7 @@ tt <- summary.performance2(postprocessing_portfolios(combined_portfolios2, pp_co
 **Observation**: The performance summary reveals:
 
 - All constrained portfolios exhibit Sharpe ratios (out-of-sample and annualized) significantly above 1, even when taking transaction costs properly into account. All cases therefore outperform the equally weighted portfolio.
-- Turnover and Sharpe ratios are smallest for the combined portfolio, signalling too many penalties.
+- The portfolios with the highest turnover-adjusted Sharpe ratios are the combined constraints and the transaction cost constrained portfolios, with the highest Sharpe ratios being shown for the latter portfolios.
 - Postprocessing has no impact on the combined portfolio, as all features of this portfolio already perfectly adhere to the constraints.
 
 ### Conclusion
@@ -1029,9 +1029,9 @@ tt <- summary.weights(combined_portfolios_bm, print = TRUE)
 
 **Observation**: The weight summary shows:
 
-- Large weight differences between -0.8536 an 0.9665, whereas the average weight standard deviation per date is 0.33.
-- Large total turnover at 1472.
-- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of 11.8251 (0.0453 after postprocessing).
+- Large weight differences `r tt[["Weights (Min/Max)"]][1]` (and `r tt[["Weights (Min/Max)"]][2]` after postprocessing), indicating extreme allocations that are smoothed after postprocessing (note, that postprocessing is necessary here, as the optimizer cannot guarantee, that benchmark tilts are self-financing)
+- Large total turnover at `r tt[["Total Turnover"]][1]`, indicating excessive trading activity relative to the benchmark at `r tt[["Total Turnover"]][2]`
+- Concentration in a few assets, leading to poor diversification, based on the average Herfindahl-Hirschman Index (HHI) of `r tt[["HHI M(SD)"]][1]` (and `r tt[["HHI M(SD)"]][2]` after postprocessing).
 
 ```{r summarize_unconstrained_benchmark_p, results='asis', cache=TRUE}
 tt <- summary.performance2(combined_portfolios_bm, transaction_cost = 0.005, gamma = 3, test = TRUE, print = TRUE) 
@@ -1039,8 +1039,8 @@ tt <- summary.performance2(combined_portfolios_bm, transaction_cost = 0.005, gam
 
 **Observation**: Performance-wise we observe the following:
 
-- The Sharpe ratio is high at 0.9119, larger than the value weighted (given) benchmark at 0.5117, therefore significantly exceeding it for the raw as well as for the postprocessed portfolio.
-- The turnover, reduces down to 98.5347 from 1472 after postprocessing. This leads to a turnover-adjusted Sharpe Ratio of 0.7803, which is still significantly above the benchmark at 0.4844. Also, and most importantly, the information ratio is significant at 0.0743 and 0.0612, indicating that the portfolio is able to outperform the benchmark significantly in raw and postprocessed case, even when taking into account tracking error.
+- The Sharpe ratio is high at `r tt[["Sharpe Ratio"]][1]` (`r tt[["Sharpe Ratio"]][2]` for the postprocessed portfolio), larger than the value weighted (given) benchmark at `r tt[["Sharpe Ratio"]][3]`, therefore significantly exceeding it for the raw as well as for the postprocessed portfolio.
+- The turnover, reduces down to `r round(tt[["Turnover"]][2],0)` after postprocessing, indicating excessive trading activity relative to the benchmark at `r round(tt[["Turnover"]][3],0)`. This leads to a turnover-adjusted Sharpe Ratio of `r tt[["TC Adjusted Sharpe"]][1]` (`r tt[["TC Adjusted Sharpe"]][2]` for the postprocessed portfolio), which is still significantly above the benchmark at `r tt[["TC Adjusted Sharpe"]][3]`. Also, and most importantly, the information ratio is significant at `r tt[["Information Ratio"]][1]` (`r tt[["Information Ratio"]][2]` for the postprocessed portfolio), indicating that the portfolio is able to outperform the benchmark significantly in raw and postprocessed case, even when taking into account tracking error.
 
 ### Constrained Benchmark Optimization
 
@@ -1097,9 +1097,9 @@ tt <- summary.weights(combined_portfolios_bm2, print = TRUE)
 
 **Observation**: The weight summary shows:
 
-- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of 0.0222 and 0.0212 (postprocesssed).
-- The average Herfindahl-Hirschman Index (HHI) is 0.0578 and 0.0545, indicating worse diversification, that for the postprocessed unconstrained portfolio.
-- The total turnover is 95.1616, indicating a more stable portfolio (91.2523 after postprocessing).
+- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of `r tt[["Std.Dev./Date M(SD)"]][2]` and `r tt[["Std.Dev./Date M(SD)"]][3]` after postprocessing.
+- The average Herfindahl-Hirschman Index (HHI) is now `r tt[["HHI M(SD)"]][2]` and `r tt[["HHI M(SD)"]][3]` after postprocessing, indicating worse diversification, than for the postprocessed unconstrained portfolio.
+- The total turnover is `r tt[["Total Turnover"]][2]` and `r tt[["Total Turnover"]][3]` after postprocessing, indicating a more stable portfolio.
 
 
 ```{r summarize_constrained_benchmark_p, results='asis', cache=TRUE}
@@ -1108,18 +1108,21 @@ tt <- summary.performance2(combined_portfolios_bm2, transaction_cost = 0.005, ga
 
 **Observation**: Performance-wise we observe the following:
 
-- The Sharpe ratio is highest at 1.2621, significantly exceeding the benchmark at 0.5117 and larger than the unconstrained and postprocessed portfolio. Most interestingly it is not improving further when postprocessing the portfolios.
-- Even when taking transaction costs into account, the turnover-adjusted Sharpe Ratio is 1.1372 (0.946 for the postprocessed portfolio), which is still significantly above the benchmark at 0.4844.
-- The information ratio is significant at 0.0594 and 0.0731, indicating that the portfolio is able to outperform the benchmark significantly in raw and even further in the postprocessed case, even when taking into account tracking error.
+- The Sharpe ratio is highest at `r tt[["Sharpe Ratio"]][2]` (`r tt[["Sharpe Ratio"]][3]` for the postprocessed portfolio), significantly exceeding the benchmark at `r tt[["Sharpe Ratio"]][4]`, and larger than the unconstrained and postprocessed portfolio.
+- Even when taking transaction costs into account, the turnover-adjusted Sharpe Ratio is significant at `r tt[["TC Adjusted Sharpe"]][2]` (`r tt[["TC Adjusted Sharpe"]][3]` for the postprocessed portfolio), which is still significantly above the benchmark at `r tt[["TC Adjusted Sharpe"]][4]`.
+- The information ratio is significant at `r tt[["Information Ratio"]][2]` (`r tt[["Information Ratio"]][3]` for the postprocessed portfolio), indicating that the portfolio is able to outperform the benchmark significantly in raw and postprocessed case, even when taking into account tracking error.
 
 ```{r summarize_constrained_benchmark_p2, results='asis', cache=TRUE}
 tt <- summary.performance(combined_portfolios_bm2, test = TRUE, print = TRUE)
 ```
+[1] "Portfolio"                 "Annualized Mean"           "Annualized Volatility"     "Sharpe Ratio"              "Sortino Ratio"             "Max Drawdown"             
+ [7] "Skewness"                  "Kurtosis"                  "Value at Risk"             "Conditional Value at Risk" "Alpha"                     "Beta"                     
+[13] "Tracking Error"            "Information Ratio"     
 
 **Observation**: Looking at further details, performance-wise we observe:
 
-- Here we find the reason for th larger information ratio of the postprocessed portfolio in relation to the regular constrained portfolio: The alpha is smaller at 0.0195 to 0.0216, while the tracking error is also smaller at 0.2592 to 0.2631. This leads to a higher information ratio of 0.9082 to 0.8171.
-- The beta is significantly lower for the constrained portfolios at 0.3007 and 0.9327, indicating that the portfolios are less prone to systematic or benchmark risk.
+- Here we find the reason for the larger information ratio of the postprocessed portfolio in relation to the regular constrained portfolio: The alpha is smaller at `r tt$Alpha[2]` to `r tt$Alpha[3]`, while the tracking error is also smaller at `r tt[["Tracking Error"]][2]` to `r tt[["Tracking Error"]][3]`. This leads to a higher information ratio of `r tt[["Information Ratio"]][2]` to `r tt[["Information Ratio"]][3]`.
+- The beta is significantly higher for the constrained portfolios at `r tt$Beta[2]` to `r tt$Beta[3]`, indicating that the portfolios are more prone to systematic or benchmark risk.
 
 ### Penalties for `sharpe_ratio_difference_loss`
 
@@ -1222,27 +1225,27 @@ combined_penalty_portfolios <- combine_portfolioReturns(list(
 )
 
 # Summarize combined weights
-tt <- summary.weights(combined_penalty_portfolios, print = TRUE)
+# be aware that we need to postprocess to get zero-sum tilting portfolios
+tt <- summary.weights(postprocessing_portfolios(combined_penalty_portfolios, pp_config_bm), print = TRUE)
 ```
 
 **Observation**: The weight summary shows:
 
-- The L1 penalty leads to more sparse weight distributions, with average standard deviations of 0.0078 and 0.0079.
-- The L2 penalty results in smoother weight distributions, with average standard deviations of 0.0086 and 0.0079.
-- The total turnover is lowest for the L1 penalty at 37.6645, togetehr with the combined l1 and l2 portfolio.
-- Diversification (in terms of diversity) is best for the L2 penalty at 64.1119, followed by the L1 penalty at 62.1236 and the the combined l1 and l2 portfolio.
-
+- The L1 penalty leads to more sparse weight distributions, with average standard deviations of `r tt[["Std.Dev./Date M(SD)"]][2]` and `r tt[["Std.Dev./Date M(SD)"]][4]`.
+- The L2 penalty results in smoother weight distributions, with average standard deviations of `r tt[["Std.Dev./Date M(SD)"]][3]` and `r tt[["Std.Dev./Date M(SD)"]][4]`.
+- The total turnover is lowest for the L1 penalty at `r tt[["Total Turnover"]][2]`, followed by the combined L1 and L2 penalty at `r tt[["Total Turnover"]][4]` and the L2 portfolio at `r tt[["Total Turnover"]][3]`.
+- Diversification (in terms of diversity) is best for the L2 penalty at `r tt[["Diversity"]][3]`, followed by the L1 penalty at `r tt[["Diversity"]][2]` and the the combined L1 and L2 portfolio.
 
 ```{r compare_l1_l2_p, results='asis', cache=TRUE}
 # Summarize combined performance
-tt <- summary.performance2(combined_penalty_portfolios, test = TRUE, print = TRUE)
+tt <- summary.performance2(postprocessing_portfolios(combined_penalty_portfolios, pp_config_bm), transaction_cost = 0.005, gamma = 3, test = TRUE, print = TRUE)
 ```
 
 **Observation**: Performance-wise we observe the following:
 
-- The Sharpe ratio is highest for the constrained portfolio at 1.2621, significantly exceeding the benchmark at 0.5117 and larger than the portfolios with L1 and L2 penalties. The L1 and L2 penalties lead to Sharpe ratios of 0.5923 and 0.6233, respectively.
-- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at 1.2372, followed by the L1 and L2 portfolios at 0.5795 and 0.6113.
-- The information ratio is highest for the constrained portfolio at 0.0594, followed by the L1 and L2 portfolios at 0.0055 and 0.0255.
+- The Sharpe ratio is highest for the constrained portfolio at `r tt[["Sharpe Ratio"]][1]`, significantly exceeding the benchmark at `r tt[["Sharpe Ratio"]][5]` and larger than the portfolios with L1 and L2 penalties. The L1 and L2 penalties lead to Sharpe ratios of `r tt[["Sharpe Ratio"]][2]` and `r tt[["Sharpe Ratio"]][3]`, respectively.
+- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at `r tt[["TC Adjusted Sharpe"]][1]`, followed by the L1 and L1/L2 portfolios at `r tt[["TC Adjusted Sharpe"]][2]` and `r tt[["TC Adjusted Sharpe"]][4]`.
+- The information ratio is highest for the constrained portfolio at `r tt[["Information Ratio"]][1]`, followed by the L2 and L1/L2 portfolios at `r tt[["Information Ratio"]][3]` and `r tt[["Information Ratio"]][4]`.
 
 ## Information Ratio Loss Optimization
 
@@ -1332,27 +1335,27 @@ combined_ir_portfolios <- combine_portfolioReturns(list(
 ))
 
 # Summarize combined weights
-tt <- summary.weights(combined_ir_portfolios, print = TRUE)
+tt <- summary.weights(postprocessing_portfolios(combined_ir_portfolios, pp_config_bm), print = TRUE)
 ```
 
 **Observation**: The weight summary shows:
 
-- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of 0.0079 and 0.0077.
-- The average Herfindahl-Hirschman Index (HHI) is 0.018 and 0.0187, indicating better diversification.
-- The total turnover is lowest for the L1 and L2 penalties at 38.4873, followed by the regression-based portfolio at 38.5421.
+- The constrained portfolios exhibit more stable weight distributions, with average standard deviations of `r tt[["Std.Dev./Date M(SD)"]][3]` and `r tt[["Std.Dev./Date M(SD)"]][4]`.
+- The average Herfindahl-Hirschman Index (HHI) is equally low for all portfolios, indicating better diversification.
+- The total turnover is lowest for the L1 and L2 penalties at `r tt[["Total Turnover"]][2]`, followed by the regression-based portfolio at `r tt[["Total Turnover"]][4]`.
 - All in all, the portfolios show not many distinguishing factors.
 
 ```{r combine_ir_portfolios_p, results='asis', cache=TRUE}
 # Summarize combined performance
-tt <- summary.performance2(combined_ir_portfolios, test = TRUE, print = TRUE)
+tt <- summary.performance2(postprocessing_portfolios(combined_ir_portfolios, pp_config_bm), test = TRUE, print = TRUE)
 ```
 
 **Observation**: Performance-wise we observe the following:
 
-- The constrained portfolio exhibits the highest Sharpe ratio at 1.2621, significantly exceeding the benchmark at 0.5117.
-- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at 1.2372, followed by the non-regression and regression-based portfolios at 0.6629 and 0.645.
-- The information ratio is highest for the constrained portfolio at 0.0594, followed by the non-regression and regression-based portfolios at 0.0369 and 0.0315.
-- The Certainty Equivalent Return (CER) is highest for the constrained portfolio at 0.2111, followed by the non-regression and regression-based portfolios at 0.0754 and 0.0716.
+- The constrained portfolio exhibits the highest Sharpe ratio at `r tt[["Sharpe Ratio"]][1]`, significantly exceeding the benchmark at `r tt[["Sharpe Ratio"]][5]` and larger than the portfolios with information ratio optimization.
+- The turnover-adjusted Sharpe Ratio is highest for the constrained portfolio at `r tt[["TC Adjusted Sharpe"]][1]`, followed by the regression-based portfolio at `r tt[["TC Adjusted Sharpe"]][4]`.
+- The information ratio is highest for the constrained portfolio at `r tt[["Information Ratio"]][1]`, followed by the non-regression and regression-based portfolios at `r tt[["Information Ratio"]][3]` and `r tt[["Information Ratio"]][4]`.
+- The Certainty Equivalent Return (CER) is highest for the constrained portfolio at `r tt[["CER"]][1]`, followed by the non-regression and regression-based portfolios at `r tt[["CER"]][3]` and `r tt[["CER"]][4]`.
 - Most interestingly, its not the information ratio based optimal portfolios that shows the highest information rate.
 
 # Conclusion

@@ -1288,9 +1288,10 @@ summary.performance <- function(portfolio_object, benchmark_data = NULL, test = 
       format = "markdown",
       caption = "Portfolio Performance Summary"
     ))
+    return(results_to_print)
+  } else {
+    return(results)
   }
-
-  return(results)
 }
 
 #' Summarize Advanced Portfolio Performance Metrics and Statistical Tests
@@ -1487,9 +1488,10 @@ summary.performance2 <- function(portfolio_object, transaction_cost = 0.001, gam
       format = "markdown",
       caption = "Portfolio Performance Summary"
     ))
+    return(results_to_print)
+  } else {
+    return(results)
   }
-
-  return(results)
 }
 
 #' Summarize Portfolio Correlations
